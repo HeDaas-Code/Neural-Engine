@@ -30,7 +30,7 @@
 
 1. **禁止共享内存 / 全局变量 / 文件锁**——只走 Queue
 2. **禁止 dataclass 直接跨进程传输**——`pickle` 走的是 Python 对象语义，跨语言无法消费；统一 `json.dumps` + `protocol.to_dict / from_dict`
-3. **错误包装**：`from_dict` 抛 `ValueError` 时，bus 的 `get_*` 抛 `ProtocolError`（不暴露 JSON 解析细节给上层）
+3. **错误传播**：`from_dict` 抛 `ValueError` 时，`bus.get_*` **直接传播** ValueError——v0 决策**不**包装成 `ProtocolError`（v0-issue-3 / v0-issue-4 / v0-issue-5 三个 spec 一致决定）
 
 ## 进程启动序列（v0-issue-17）
 
@@ -75,7 +75,7 @@ def main(cmd_q, evt_q):
             print(f"[input] {evt.var}")
             user_input = input("> ")
             cmd_q.put(UserInputCmd(value=user_input))
-        elif isinstance(evt, ChapterEndedEvent):
+        elif isinstance(evt, ChapterEndEvt):
             print("[chapter end]")
             break
         elif isinstance(evt, ShutdownCmd):

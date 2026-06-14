@@ -136,11 +136,11 @@ raw-docs/
 | 命名 | Neural Engine-vault | **工作Wiki**（中文）|
 | 位置 | 仓库内但 .gitignore | **仓库内但会被 commit**（作为项目 Wiki）|
 | 提交 GitHub | 否 | **是**（main + wiki 分支双推）|
-| Issue 体系 | 18 个 GH #2~#21 + v0-issue-N | **22 个 GH #22~#44** + v0-issue-1~21 |
+| Issue 体系 | 18 个 GH #2~#21 + v0-issue-N | **22 个 GH #22~#44** + v0-issue-1~19（19 ready-for-agent）+ #20/#21 HITL |
 | HITL 数量 | 1（#15）| **2**（#43 / #44）|
 | 还原前实现 | 53 测试通过 | **0**（仓库被还原）|
 | GUI 路径 | 单路径（PyQt6 占位）| **三路径**（PyQt6 / CLI / pytest）|
-| 包结构 | `src.core.engine` | **`core.engine`**（不带 `src.` 前缀）|
+| 包结构 | `src.core.engine`（物理 `src/core/...`，import 不带 src）| **`core.engine`**（物理 `src/core/engine/`，import 不带 src）|
 
 ## 待办（wiki 视角）
 

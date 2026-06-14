@@ -14,7 +14,7 @@
 
 ## v0 包结构（v0-issue-1）
 
-按 v0-issue-1 决策，包**不带 `src.` 前缀**——`pyproject.toml` 配置 `pythonpath = ["src"]` 后：
+包**物理目录**在 `src/` 下（如 `src/core/engine/`），但**导入路径**不带 `src.` 前缀——`pyproject.toml` 配 `pythonpath = ["src"]` 后 import 路径是 `core.engine.*`：
 
 ```python
 from core.engine.ast_nodes import Story, Block, Start, End, ...

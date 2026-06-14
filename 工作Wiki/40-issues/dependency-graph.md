@@ -101,7 +101,7 @@ flowchart LR
 | 决策 | 来源 |
 | --- | --- |
 | decorator_state 在 **node start** 时清空（不是 ADR §4.1 写的 "node end"）| v0-issue-15 |
-| 包结构 `core.engine`（不带 `src.` 前缀）| v0-issue-1 |
+| 包结构 `core.engine`（物理目录 `src/core/engine/`）| v0-issue-1 |
 | PyQt6 可选，三路径 GUI | v0-issue-18 |
 | 路径 B 默认（CLI fallback）| v0-issue-18 |
 | §11 #3 用 `grep -r '"NEXT"' src/` pytest 守护 | v0-issue-20 |

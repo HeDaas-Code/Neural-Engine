@@ -71,7 +71,7 @@ LoadChapterCmd("chapters/chapter01.md")
 TextEvt("雨夜。", "narration")
 TextEvt("雨声从破旧窗户的缝隙中渗入。", "narration")
 TextEvt("你坐在窗边，听着雨声。", "narration")
-DecoratorEvent("style", ["bgm:rain.mp3"])
+DecoratorEvt("style", ["bgm:rain.mp3"])
 PromptInputEvt("p_mood")
 # GUI 发 UserInputCmd("平静")
 TextEvt("平静", "echo")
@@ -85,7 +85,7 @@ LogEvt("info", "条件打桩")
 # node if 永远选第一分支 → NEXT=ref(t_a)=(None,"ca") 跳 ca
 
 # === id:ca 块 ===
-DecoratorEvent("style", ["bgm:storm.mp3"])
+DecoratorEvt("style", ["bgm:storm.mp3"])
 TextEvt("你打开门，雨中站着一个人。", "narration")
 # node end → NEXT=null + id:ca 是普通 id（无 chapterYY）→ ChapterEndEvt
 

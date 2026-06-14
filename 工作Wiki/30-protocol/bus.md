@@ -6,17 +6,21 @@
 
 ```python
 class EngineBus:
-    def __init__(self, cmd_q: Queue, evt_q: Queue):
-        ...
+    def __init__(
+        self,
+        cmd_q: multiprocessing.Queue | None = None,
+        evt_q: multiprocessing.Queue | None = None,
+        *,
+        use_multiprocessing: bool = True,
+    ): ...
 
-    def put_cmd(self, cmd: Cmd) -> None: ...
-    def get_cmd(self, timeout: float | None = None) -> Cmd: ...
+    def put_cmd(self, cmd) -> None: ...
+    def get_cmd(self) -> object: ...       # 见 [[raw-docs/工程笔记/v0-issue-5-bus.md]] get_cmd → Cmd
 
-    def put_evt(self, evt: Evt) -> None: ...
-    def get_evt(self, timeout: float | None = None) -> Evt: ...
+    def put_evt(self, evt) -> None: ...
+    def get_evt(self) -> object: ...       # 见同上 → Evt
 
-class ProtocolError(Exception):
-    """反序列化失败时抛（包装 ValueError）"""
+    def close(self) -> None: ...
 ```
 
 ## 内部实现骨架
@@ -53,19 +57,22 @@ class EngineBus:
         return self._get(self._evt_q, timeout)
 ```
 
-## 强约束
+## 强约束（出自 v0-issue-5 acceptance）
 
 1. **统一序列化 `json.dumps` / `json.loads`**——禁止 `pickle` / `eval` / 自定义 codec
 2. **`protocol.to_dict / from_dict` 是唯一序列化点**——不绕过 dataclass 直接传 dict
-3. **`from_dict` 抛 `ValueError` 时，bus 包装成 `ProtocolError`**——不暴露 JSON 解析细节
-4. **`get_*` 默认阻塞**；`timeout` 不为 None 时超时抛 `queue.Empty`（**不重写** `Empty` 异常类型）
+3. **`from_dict` 抛 `ValueError` 时**，`bus.get_*` **直接传播** ValueError（**不**包装成 `ProtocolError`，**v0 决策**——v0-issue-3 / v0-issue-4 一致决定**不**引入 `ProtocolError`）
+4. **`use_multiprocessing=False` 时**改用 `queue.Queue`，给单进程测试用——`isinstance(q, multiprocessing.Queue)` 判别（**不**用 duck type）
+5. **`bus.close()` 排空残留**——**不** join thread（multiprocessing.Queue 没有 close-on-GC）
 
 ## 测试契约（v0-issue-5）
 
-至少 3 个用例：
-1. **双向发收**——两个 EngineBus 实例（A 用同一对 Queue 反向）互发互收
-2. **序列化往返**——Cmd / Evt 各跑一次 `put → get`，断言字段相等
-3. **协议错误包装**——发送非法 dict 让 `from_dict` 抛 `ValueError`，断言 `get_*` 抛 `ProtocolError`
+acceptance 明确列出 4 条：
+
+1. **default 注入**——两个 `None` 时按 `use_multiprocessing` 选正确 queue 类型
+2. **双向 round-trip**——put_cmd → get_cmd 字段一致；put_evt → get_evt 字段一致
+3. **序列化**：跨进程的 dict 通过 `json.dumps/loads` 正确（用 mock `multiprocessing.Queue` 验证 bytes 形态）
+4. **错误传播**：`get_cmd` 收到坏 dict 抛 ValueError，**不**被吞（**注意**：是 ValueError，不是 ProtocolError）
 
 ## 内存 fake 队列（测试用 fixture）
 

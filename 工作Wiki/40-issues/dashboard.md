@@ -1,6 +1,6 @@
 # 40 · Issue 看板
 
-> **TL;DR**：22 个 GH issue（#22 ~ #44）按 PRD-0001 拆分的 v0 实施任务——20 条 `ready-for-agent`（v0-issue-1 ~ 19）+ 2 条 `ready-for-human`（v0-issue-20 / 21 HITL 守护）。仓库还原后**全部 OPEN**，实现进度 0/22。
+> **TL;DR**：22 个 GH issue（#22 ~ #44）按 PRD-0001 拆分的 v0 实施任务——**19 条 `ready-for-agent`**（v0-issue-1 ~ 19） + **1 父 PRD #22 `ready-for-human`** + **2 条 `ready-for-human` HITL**（#43 / #44 = v0-issue-20 / 21 守护）。仓库还原后**全部 OPEN**，实现进度 0/22。
 
 ## 总览表（GH 编号 → v0-issue 编号）
 

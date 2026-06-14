@@ -36,9 +36,9 @@
 
 **验收**（v0-issue-4 acceptance，待实现）：
 - `Evt` 基类 + 6 个 dataclass
-- `DecoratorEvent.args` 类型 `list[str]`，允许空（休止符场景）
-- `RouteEvent.target` 字段存在且非空（v0 强制 chapter 路由）
-- `LogEvent.level` 限定为 `Literal["info", "warn", "error"]`
+- `DecoratorEvt.args` 类型 `list[str]`，允许空（休止符场景）
+- `RouteEvt.target` 字段存在且非空（v0 强制 chapter 路由）
+- `LogEvt.level` 类型 `str`（v0-issue-4 spec 决定**不**用 `Literal`——`TextEvt.style: str = "narration"` 也是普通 `str` + 默认值）
 
 ## Python 类型契约
 
@@ -70,14 +70,14 @@ class Evt: ...
 @dataclass
 class TextEvt(Evt):
     content: str
-    style: Literal["narration", "echo"]
+    style: str = "narration"          # v0-issue-4：str + 默认值（非 Literal）
 
 @dataclass
 class PromptInputEvt(Evt):
     var: str
 
 @dataclass
-class DecoratorEvent(Evt):
+class DecoratorEvt(Evt):
     name: str
     args: list[str]
 
@@ -86,12 +86,12 @@ class RouteEvt(Evt):
     target: str
 
 @dataclass
-class ChapterEndedEvent(Evt):
-    pass
+class ChapterEndEvt(Evt):
+    pass    # 无字段（注意：旧版本曾写 `reason`，**v0-issue-4 spec 删掉了**）
 
 @dataclass
 class LogEvt(Evt):
-    level: Literal["info", "warn", "error"]
+    level: str    # v0-issue-4：str（非 Literal）
     message: str
 ```
 
@@ -111,7 +111,7 @@ class LogEvt(Evt):
 TextEvt("雨夜。", "narration")
 TextEvt("雨声从破旧窗户的缝隙中渗入。", "narration")
 TextEvt("你坐在窗边，听着雨声。", "narration")
-DecoratorEvent("style", ["bgm:rain.mp3"])
+DecoratorEvt("style", ["bgm:rain.mp3"])
 PromptInputEvt("p_mood")
 # GUI 发 UserInputCmd("平静")
 TextEvt("平静", "echo")
@@ -125,7 +125,7 @@ LogEvt("info", "条件打桩")
 # node if 永远选第一分支 → NEXT=ref(t_a)=(None,"ca") 跳 ca
 
 # === id:ca 块 ===
-DecoratorEvent("style", ["bgm:storm.mp3"])
+DecoratorEvt("style", ["bgm:storm.mp3"])
 TextEvt("你打开门，雨中站着一个人。", "narration")
 # node end → NEXT=null + id:ca 是普通 id（无 chapterYY）→ ChapterEndEvt
 
