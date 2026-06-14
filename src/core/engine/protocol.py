@@ -30,6 +30,23 @@ def _require_str(d: dict, field: str, owner: str) -> str:
     return val
 
 
+def _require_str_list(d: dict, field: str, owner: str) -> list[str]:
+    """校验 d[field] 存在且是 list[str]，否则 ValueError。"""
+    if field not in d:
+        raise ValueError(f"{owner} 缺少字段 {field!r}")
+    val = d[field]
+    if not isinstance(val, list):
+        raise ValueError(
+            f"{owner}.{field} 应为 list，得到 {type(val).__name__}"
+        )
+    for i, item in enumerate(val):
+        if not isinstance(item, str):
+            raise ValueError(
+                f"{owner}.{field}[{i}] 应为 str，得到 {type(item).__name__}"
+            )
+    return val
+
+
 # ─── 命令（GUI → Engine） ─────────────────────────────────────────────────────
 
 
@@ -92,3 +109,129 @@ def parse_cmd(d: dict):
     if cmd_name not in _CMD_REGISTRY:
         raise ValueError(f"未知 cmd: {cmd_name!r}")
     return _CMD_REGISTRY[cmd_name].from_dict(d)
+
+
+# ─── 事件（Engine → GUI） ─────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class TextEvt:
+    content: str
+    style: str = "narration"
+
+    def to_dict(self) -> dict:
+        return {"event": "text", "content": self.content, "style": self.style}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "TextEvt":
+        _check_dict(d, "TextEvt")
+        content = _require_str(d, "content", "TextEvt")
+        # style 可选，默认 narration
+        style = d.get("style", "narration")
+        if not isinstance(style, str):
+            raise ValueError(
+                f"TextEvt.style 应为 str，得到 {type(style).__name__}"
+            )
+        return cls(content=content, style=style)
+
+
+@dataclass(frozen=True, slots=True)
+class PromptInputEvt:
+    var: str
+
+    def to_dict(self) -> dict:
+        return {"event": "prompt_input", "var": self.var}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "PromptInputEvt":
+        _check_dict(d, "PromptInputEvt")
+        return cls(var=_require_str(d, "var", "PromptInputEvt"))
+
+
+@dataclass(frozen=True, slots=True)
+class DecoratorEvt:
+    name: str
+    args: list[str]
+
+    def to_dict(self) -> dict:
+        return {
+            "event": "decorator",
+            "name": self.name,
+            "args": list(self.args),  # 防御性拷贝
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "DecoratorEvt":
+        _check_dict(d, "DecoratorEvt")
+        return cls(
+            name=_require_str(d, "name", "DecoratorEvt"),
+            args=_require_str_list(d, "args", "DecoratorEvt"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RouteEvt:
+    target: str
+
+    def to_dict(self) -> dict:
+        return {"event": "route", "target": self.target}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "RouteEvt":
+        _check_dict(d, "RouteEvt")
+        return cls(target=_require_str(d, "target", "RouteEvt"))
+
+
+@dataclass(frozen=True, slots=True)
+class ChapterEndEvt:
+    def to_dict(self) -> dict:
+        return {"event": "chapter_end"}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ChapterEndEvt":
+        _check_dict(d, "ChapterEndEvt")
+        return cls()
+
+
+@dataclass(frozen=True, slots=True)
+class LogEvt:
+    level: str
+    message: str
+
+    def to_dict(self) -> dict:
+        return {"event": "log", "level": self.level, "message": self.message}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "LogEvt":
+        _check_dict(d, "LogEvt")
+        return cls(
+            level=_require_str(d, "level", "LogEvt"),
+            message=_require_str(d, "message", "LogEvt"),
+        )
+
+
+# ─── 工厂函数 ────────────────────────────────────────────────────────────────
+
+
+_EVT_REGISTRY = {
+    "text": TextEvt,
+    "prompt_input": PromptInputEvt,
+    "decorator": DecoratorEvt,
+    "route": RouteEvt,
+    "chapter_end": ChapterEndEvt,
+    "log": LogEvt,
+}
+
+
+def parse_evt(d: dict):
+    """按 d["event"] 字段分发到对应事件 dataclass。
+
+    未知 event 值或缺 event 字段 → 抛 ValueError。
+    """
+    _check_dict(d, "event")
+    evt_name = d.get("event")
+    if not isinstance(evt_name, str):
+        raise ValueError(f"event 字段应为 str，得到 {type(evt_name).__name__}")
+    if evt_name not in _EVT_REGISTRY:
+        raise ValueError(f"未知 event: {evt_name!r}")
+    return _EVT_REGISTRY[evt_name].from_dict(d)
