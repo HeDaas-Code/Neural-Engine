@@ -46,17 +46,19 @@
 
 ## 关键里程碑
 
-1. **M1（v0 完工 ✅）**——22/22 GH issue 全部 closed（commit `125f237`），182/182 测试通过，docs/adr/0002-v0-engine-implementation.md + docs/audit/v0-invariant-audit.md 发布。**HITL #43 #44 由 agent 在 owner 指示下代执行验收**（详见 ADR-0002 §10 owner 必审查）。
-2. **M2（真实运行时）**——`@style` 真接音视频、`node if` 真做条件、章节路由真加载下一章；GUI 路径 A（PyQt6 QMainWindow）也包含
+1. **M1（v0 完工 ✅）**——22/22 GH issue 全部 closed（commit `125f237`），182/182 测试通过，docs/adr/0002-v0-engine-implementation.md + docs/audit/v0-invariant-audit.md 发布。
+2. **M2（v1 表达式子系统 ⏳ 部分）**——v1-issue-1 骨架已完成（commit `2a83774`，219/219 测试通过）；**v1-issue-5/6/7 真实现仍 OPEN**——executor 接入 dispatcher + chapter01.md 真求值。**关键卡点：GH #50**。详见 [[../40-issues/dashboard#v1-表达式子系统-prd-0002--adr-0003]]
 3. **M3（编辑器）**——`src/editor/` 起新上下文，节点图可视化
 4. **M4（跨平台）**——runtime 上下文拆 Web / 移动端
 
-## 仓库状态（2026-06-15 v0 闭环）
+## 仓库状态（2026-06-15 v1 骨架 + v0 闭环）
 
-- HEAD `125f237 docs: v0-issue-20/21 HITL 验收 + ADR-0002 + audit 报告`
-- src/core/engine/ 7 个 .py + chapters/chapter01.md（与 ADR §附录 A 字节级一致）
-- 182 个 pytest 全过（v0-issue-1 ~ v0-issue-19 全部 done + 30 条 HITL 守护）
-- 22 个 GH issue 全 CLOSED（v0 全部闭环）
-- 详见 [[../40-issues/dashboard]] + [[../30-protocol/implementation-deviations]] + `docs/adr/0002-v0-engine-implementation.md`
+- HEAD `50747ec docs: 新增 PRD-0002 v1 表达式子系统 + GH issue 追踪`（cursor）
+- v0 部分：HEAD `c1844d9 v0 闭环状态同步`
+- src/core/engine/ 7 个 .py + **新 src/core/engine/expr/ 6 个 .py**（v1-issue-1 骨架）
+- chapters/chapter01.md（与 ADR §附录 A 字节级一致）
+- 219 个 pytest 全过（v0 182 + v1-issue-1 骨架 37）
+- 22 个 v0 GH issue CLOSED + 8 个 v1 issue OPEN
+- 详见 [[../40-issues/dashboard]] + `docs/adr/0002-v0-engine-implementation.md` + `docs/adr/0003-v1-expression-subsystem.md`
 
 → 相关：[[design-philosophy]] / [[../20-architecture/overview]] / `#43` `#44`

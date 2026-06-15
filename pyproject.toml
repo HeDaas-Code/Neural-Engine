@@ -9,6 +9,9 @@ description = "中文文字游戏引擎 v0 baseline"
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }
+dependencies = [
+    "simpleeval>=1.0",  # v1-issue-1 表达式求值器 (ADR-0003 §1 决策 1)
+]
 
 [project.optional-dependencies]
 dev = [

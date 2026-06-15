@@ -61,21 +61,137 @@
 ### 阶段 5（端到端）✅ done
 - `#42` chapter01 fixture + 集成测试（`1a76382`）
 
-### 阶段 6（HITL 完工）⏳ owner 待做
-- `#43` §11 不变量自动化守护（HITL）—— 跑 `grep -r '"NEXT"' src/` 等 3 条 + 写 `docs/audit/v0-invariant-audit.md`
-- `#44` ADR-0002 完工记录（HITL）—— 写 4 条偏差登记（[[implementation-deviations]]）
+### 阶段 7（v0 完工 HITL）✅ done
+- #43 §11 不变量自动化守护（commit `125f237`，owner 接受）
+- #44 ADR-0002 完工记录（commit `125f237`，owner 接受）
 
-## 完成度（2026-06-15 v0 完工实测）
+## v1 表达式子系统（PRD-0002 / ADR-0003）
+
+> **v1-issue-1 骨架已完成**（commit `2a83774`，219/219 测试通过）。**v1-issue-2/3/4 真实现已被骨架 commit 超额完成**；**v1-issue-5/6/7 仍未做**——其中 #6（dispatcher 接入 executor）是 v1 闭环的唯一卡点。
+
+| GH # | v1-issue | 标题 | 标签 | 状态 | commit |
+| --- | --- | --- | --- | --- | --- |
+| 53 | 父 PRD | v1 表达式子系统（node if 真求值） | ready-for-human | ❌ **OPEN** | — |
+| 52 | v1-issue-1 | 表达式子系统骨架 (ADR-0003) | ready-for-agent | ✅ done（实测）| `2a83774` |
+| 46 | v1-issue-2 | ExprTranslator 拓展（Chinese 关键字 + keyword_table）| ready-for-agent | ⚠️ OPEN（**被骨架超额完成**）| `2a83774` |
+| 47 | v1-issue-3 | CustomExecutor 完整实现 | ready-for-agent | ⚠️ OPEN（**被骨架超额完成**）| `2a83774` |
+| 48 | v1-issue-4 | ExprDispatcher 完整三层调度 | ready-for-agent | ⚠️ OPEN（**被骨架超额完成**）| `2a83774` |
+| 49 | v1-issue-5 | If.cond 扩 bool_expr + range kind | ready-for-agent | ❌ **OPEN（未做）** | — |
+| 50 | v1-issue-6 | executor._execute_if 接入 ExprDispatcher | ready-for-agent | ❌ **OPEN（未做，v1 卡点）** | — |
+| 51 | v1-issue-7 | 端到端 chapter01.md 真求值 + 测试全绿 | ready-for-agent | ❌ **OPEN（未做）** | — |
+| 54 | cursor 自评 | feat(expr): v1-issue-1 ... | ready-for-agent | ❌ OPEN（cursor 自评"实施完成"但实际只骨架） | — |
+
+### v1 关键事实
+
+**1. v1-issue-1 是骨架，但超额完成了 v1-issue-2/3/4**
+
+`2a83774 feat(expr): 落地 v1-issue-1 表达式子系统骨架 (ADR-0003)` commit 内容：
+
+| 模块 | 状态 | 备注 |
+|---|---|---|
+| `expr/__init__.py` | ✅ 真实现 | 公开 API 聚合 |
+| `expr/errors.py` | ✅ 真实现 | `ExprError` / `DSLSyntaxError` / `UnsupportedNodeError` |
+| `expr/builtin_funcs.py` | ✅ 真实现 | 9 个函数白名单 |
+| `expr/translator.py` | ✅ **真实现**（不在骨架范围）| Chinese 关键字 + 简略三元 + keyword_table |
+| `expr/dispatcher.py` | ✅ **真实现**（不在骨架范围）| translator → simpleeval → fallback 三层调度 + 错误捕获 |
+| `expr/custom.py` | ✅ **真实现**（不在骨架范围）| register_function / register_evaluator / eval_fallback |
+
+→ **v1-issue-2/3/4 的真实现已在骨架 commit 里做完**（spec 超额 1.5 倍）。剩下没做的只是 v1-issue-5/6/7（dispatcher 接入 executor + end-to-end 真求值）。
+
+**2. dispatcher 没接入 executor —— 这是 v1 真正的剩余工作**
+
+**CodeGraph 调用关系**（实测 2026-06-15）：
 
 ```
-[====================] 22/22 CLOSED（v0 全部完成）
+ExprTranslator.to_python_expr  ←── ExprDispatcher.eval（✅ 内部连通）
+ExprDispatcher                  ←── 只有测试文件调用（❌ executor 没接入）
+executor._execute_if            ←── run_block（❌ 仍 v0 打桩）
 ```
 
-**代码完成度**：**100%**（v0-issue-1 ~ v0-issue-19 全部落地，commit `125f237`）
+`git diff 1a76382..HEAD -- src/core/engine/executor.py` —— **0 行变化**。`executor.py:227` 仍是 v0 打桩的 `chosen = if_node.branches[0]`。
 
-**测试完成度**：**182/182 PASSED**（152 原有 + 30 新增 v0-issue-20 守护）
+→ **v1-issue-6（dispatcher 接入 executor） = v1 闭环的关键卡点**。
 
-**Issue 完成度**：**22/22 CLOSED**（commit `125f237`，包含 #43 #44 HITL）
+**3. v1-issue-1 commit 不动 executor 是合理的——spec 划清边界**
+
+ADR-0003 §3 明确：
+
+> v0 `interpreter.py` **不改动公开 API**（仅顶部加 v1 指针注释）
+> 与 v0 模块的关系：executor.py 依赖 expr/，_execute_if 调用 dispatcher.eval_bool
+
+**但 ADR 没硬性约束 v1-issue-1 必须改 executor**。v1-issue-6 才明确"executor._execute_if 接入 ExprDispatcher"。
+
+→ v1-issue-1 commit 不改 executor **符合 spec**，v1-issue-6 才是真正动 executor 的卡点。
+
+**4. 文档/Issue 不匹配 —— cursor 写"实施完成"但实际只做骨架**
+
+`#54 feat(expr): v1-issue-1 表达式子系统骨架 (ADR-0003)` body 写"closes #52 + #53"——但 cursor **没**调 `gh issue close`，所有 issue 仍 OPEN。
+
+→ 跟 v0 一样的问题：cursor **用 `gh issue comment` 发完成报告，但没 `gh issue close`**。**owner 必做**手工 close 或调 agent 代关。
+
+### v1 实施 0 偏差（实测 vs ADR-0003）
+
+对照 ADR-0003 §3 全部 14 个接口签名 + 错误类继承，**完全符合 spec**——v1-issue-1 实施比 v0 克制。详见 [[../30-protocol/implementation-deviations#v1-issue-1-偏差审计-实测-0-偏差]]。
+
+### v1 依赖链路 + 剩余工作量
+
+```
+v1-issue-1 ✅  骨架 + 超额完成 (2/3/4)
+    ↓
+v1-issue-5 ❌  If.cond 扩 bool_expr / range kind
+    ↓
+v1-issue-6 ❌  executor._execute_if 接 dispatcher  ← 真正卡点
+    ↓
+v1-issue-7 ❌  端到端 chapter01.md 真求值
+    ↓
+HITL ❓       ADR-0004 完工记录 + 偏差登记
+```
+
+**最少剩余工作量**：
+- **v1-issue-5**：interpreter.py 改 1 处（parse_if_stmt 增 `bool_expr` kind）；ast_nodes.py 加新 If 形态——~30 行
+- **v1-issue-6**：executor.py 改 1 处（_execute_if 分流按 kind）；~30 行
+- **v1-issue-7**：test_executor_if.py 改 7 条（`test_*_stub_*` 改名 `test_*_eval_*` 加新断言）；chapter01.md 不动（已是 fixture 副本）；~50 行
+- **总**：3 个 issue × ~50 行 = 1-2 小时
+
+### v1 剩余工作与 owner 决策（待 owner 拍板）
+
+**A. 决策：剩余 6 个 issue 由谁做？**
+
+| 路径 | 谁 | 时间 | 风险 |
+|---|---|---|---|
+| **owner 自己** | 你手写 executor.py 改 ~30 行 | ~1-2 小时 | 低 |
+| **cursor 续做** | 在 Cursor IDE 里继续 v1-issue-5/6/7 | ~1-2 小时 | 低（cursor 已写好 prompt 上下文）|
+| **agent 代做** | Hermes agent 写代码 + owner review | **不推荐**——你的主要任务约定是"维护 Wiki + 审计"，不写代码 |
+
+**B. 决策：HITL（ADR-0004）写不写？**
+
+| 选项 | 含义 |
+|---|---|
+| **写** | v1-issue-8 HITL：跑 dispatcher 真求值 + 写 `docs/adr/0004-v1-expression-implementation.md` |
+| **不写** | v0 一样用 ADR-0002 模板套；但 v1-issue-1 0 偏差，ADR-0004 可能很薄 |
+
+**C. 决策：v1-issue-2/3/4 要不要 close？**
+
+| 选项 | 含义 |
+|---|---|
+| **close** | 因为骨架 commit 已超额实现这些 |
+| **留 OPEN** | 等 v1 完整闭环（5/6/7 done）后再统一关 |
+
+**v1 关键卡点**：**#50（dispatcher 接入 executor）**——是 v1 闭环的最后一道。其他 4 个 issue（#46-#49）骨架 commit 已超额实现。
+
+## 完成度（2026-06-15 v1 骨架 + v0 闭环实测）
+
+```
+[====================] 22/22 v0 CLOSED ✅ + 8/8 v1 OPEN（仅 #52 骨架完成）
+```
+
+**代码完成度**：
+- v0：**100%**（commit `125f237`，v0-issue-1 ~ 19 全部落地 + 2 HITL 验收完成）
+- v1：**12.5%**（1/8 完成 = v1-issue-1 骨架超额完成 v1-issue-2/3/4；剩余 v1-issue-5/6/7 真实现未做，**#6 是唯一卡点**）
+
+**测试完成度**：**219/219 PASSED**（152 v0 原有 + 30 v0-issue-20 守护 + 37 v1-issue-1 骨架）
+
+**Issue 完成度**：**22/30 CLOSED**（22 v0 已关 + 8 v1 全 OPEN）
 
 **v0 完工条件**：
 - ✅ §11 不变量 10 条全部有自动化 pytest 用例（`tests/test_invariants.py`）
@@ -114,4 +230,4 @@
 - 实测代码 —— `src/core/engine/` 7 个 .py（详见 [[implementation-deviations]]）
 - 依赖关系 —— [[dependency-graph]]
 
-→ 相关：[[dependency-graph]] / [[../50-fixtures/chapter01]] / [[../30-protocol/messages]] / [[../30-protocol/implementation-deviations]]
+→ 相关：[[dependency-graph]] / [[../50-fixtures/chapter01]] / [[../30-protocol/messages]] / [[../30-protocol/implementation-deviations]] / [[../20-architecture/state-machine#v1-v1-issue-6open-待实现]]

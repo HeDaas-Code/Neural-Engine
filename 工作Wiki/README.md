@@ -26,11 +26,11 @@
 - [[30-protocol/implementation-deviations]] — **实测代码 vs spec 偏差**（3 偏差 + 7 确认）
 
 ### 任务层（40-issues）
-- [[40-issues/dashboard]] — 22 个 issue 总览 + 完成度
-- [[40-issues/dependency-graph]] — issue 依赖关系图
+- [[40-issues/dashboard]] — 22 v0 + 8 v1 issue 总览 + 完成度 + **v1 路线图（合并到本节）**
+- [[40-issues/dependency-graph]] — issue 依赖关系图（v0 + v1 双子图）
 
 ### 验证层（50-fixtures）
-- [[50-fixtures/chapter01]] — ADR 附录 A 剧本分析 + 期望事件流
+- [[50-fixtures/chapter01]] — ADR 附录 A 剧本分析 + 期望事件流（**v0 打桩 + v1 真分支两版本**）
 
 ### 元信息（90-meta）
 - [[90-meta/wiki-meta]] — 本工作 Wiki 自身的元信息（创建背景 + 文件清单 + 与上一轮区别）
@@ -39,6 +39,7 @@
 ### 原文快照（raw-docs，核对用）
 - [[raw-docs/ADR-0001-v0-baseline-script-spec]] — **ADR-0001** v0 脚本规范（权威）
 - [[raw-docs/PRD-0001-v0-engine-implementation]] — **PRD-0001** v0 引擎实现
+- [[raw-docs/ADR-0003-v1-expression-subsystem]] — **ADR-0003** v1 表达式子系统架构（v1-issue-1 已落地）
 - [[raw-docs/CONTEXT-core]] — **core** 上下文术语表 + 强约束
 - [[raw-docs/CONTEXT-editor]] — **editor** 上下文术语表
 - [[raw-docs/CONTEXT-runtime]] — **runtime** 上下文术语表
@@ -79,5 +80,8 @@
 - ✅ 双推：main 分支（`origin/cursor/setup-issues-v0-vertical-slices` @ `125f237`）+ wiki 分支（`origin/wiki`）
 - ✅ **v0 全部完成（2026-06-15）**：22/22 GH issues closed + 182/182 测试通过
 - ✅ **docs/adr/0002-v0-engine-implementation.md** + **docs/audit/v0-invariant-audit.md** 发布
-- ⚠️ **owner 必审查**：ADR-0002 §10 列了 6 个 agent 越权代做的接受决策（详见 [docs/adr/0002-v0-engine-implementation.md §10](https://github.com/HeDaas-Code/Neural-Engine/blob/cursor/setup-issues-v0-vertical-slices/docs/adr/0002-v0-engine-implementation.md)）
-- 📌 **wiki 维护节奏**：v0 已闭环，下一阶段是 v1（M2 真实运行时）启动时再回来更新
+- ✅ **v1-issue-1 表达式子系统骨架（2026-06-15）**：commit `2a83774` 落地 `src/core/engine/expr/` 6 个 .py + 37 个新测试 + 219/219 测试通过
+- ⚠️ **v1 闭环（GH #49-#51）OPEN**：`executor._execute_if` 接入 `ExprDispatcher` 是唯一卡点——预计 ~30 行 executor.py 改动即可闭环。详见 [[40-issues/dashboard#v1-表达式子系统-prd-0002--adr-0003]]
+- ⚠️ **owner 必审查（v0）**：ADR-0002 §10 列了 6 个 agent 越权代做的接受决策（详见 [docs/adr/0002-v0-engine-implementation.md §10](https://github.com/HeDaas-Code/Neural-Engine/blob/cursor/setup-issues-v0-vertical-slices/docs/adr/0002-v0-engine-implementation.md)）
+- ⚠️ **owner 必审查（v1）**：v1-issue-1 0 偏差（ADR-0003 §3 全 14 接口对照）——详见 [[30-protocol/implementation-deviations#v1-issue-1-偏差审计-实测-0-偏差]]
+- 📌 **wiki 维护节奏**：v0 已闭环 + v1-issue-1 骨架已闭环；**v1 真分支（#49-#51）由 owner 决定启动时机**，启动时再回来更新 dashboard / chapter01 验证脚本段

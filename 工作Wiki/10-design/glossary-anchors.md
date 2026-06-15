@@ -77,6 +77,33 @@
 | **shallow** | [[raw-docs/CONTEXT-core.md]] | = 数据结构层 |
 | **快照** / **snapshot** | [[raw-docs/CONTEXT-core.md]] | v0 不实现 |
 
+### v1 表达式子系统族（ADR-0003 新增，已落地 v1-issue-1 骨架）
+
+| 自创词 | 出处（原文） | 备注 |
+| --- | --- | --- |
+| **表达式子系统** / **expr subpackage** | [[raw-docs/ADR-0003-v1-expression-subsystem §2 决策 2]] | v1 新增子包 `src/core/engine/expr/`（commit `2a83774`）|
+| **ExprTranslator** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.2]] | DSL 文本 → Python 表达式字符串翻译器（`expr/translator.py`）|
+| **ExprDispatcher** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.1]] | translator → simpleeval → fallback 三层调度（`expr/dispatcher.py`，**已实现**但**未接入 executor**——v1-issue-6 OPEN）|
+| **CustomExecutor** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.3]] | simpleeval 兜底 + 业务侧扩展钩子（`expr/custom.py`）|
+| **ExprError** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.5]] | 表达式求值失败（`RuntimeError` 子类，`expr/errors.py:13`）|
+| **DSLSyntaxError** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.5]] | DSL 翻译失败（`ParserError` 子类，`expr/errors.py:30`，**继承 v0 ParserError**）|
+| **UnsupportedNodeError** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.5]] | simpleeval 不支持 AST 节点（`ExprError` 子类，`expr/errors.py:22`）|
+| **BUILTIN_FUNCS** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.4]] | 9 个函数白名单（`len/int/str/float/min/max/abs/round/bool`，`expr/builtin_funcs.py:13`）|
+| **三层调度** | [[raw-docs/ADR-0003-v1-expression-subsystem §2 决策 3]] | translator → simpleeval → CustomExecutor fallback |
+| **bool_expr kind** | [[raw-docs/ADR-0003-v1-expression-subsystem §2 决策 4]] | `If.cond = ("bool_expr", expr_str)` 形态（v1-issue-5 OPEN，AST 还没加）|
+| **range kind** | [[raw-docs/ADR-0003-v1-expression-subsystem §2 决策 4]] | `If.cond = ("range", (lo, hi))` 形态（v2+，**v1 不实现**）|
+| **keyword_table** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.2]] | DSL 自定义中缀命名映射（`translator.register_keyword`，v2+ 扩展位）|
+| **register_function** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.3]] | `CustomExecutor.register_function(name, fn)`——剧情自定义函数 |
+| **register_evaluator** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.3]] | `CustomExecutor.register_evaluator(pattern, handler)`——正则匹配的 fallback handler |
+| **register_node** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.3]] | `CustomExecutor.register_node(kind, handler)`——**v2+ 占位**（v1 抛 NotImplementedError）|
+| **eval_fallback** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.3]] | `CustomExecutor.eval_fallback(py_expr, vars) -> object`——simpleeval 失败时按注册顺序匹配 |
+| **eval_bool / eval_int / eval** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.1]] | `ExprDispatcher` 的三个公开求值入口（`expr/dispatcher.py:56/72/76`）|
+| **to_python_expr** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.2]] | `ExprTranslator.to_python_expr(dsl) -> str`——DSL → Python 字符串 |
+| **Chinese 关键字** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.2]] | `且→and / 或→or / 非→not / 等于→== / 大于→> / 大于等于→>= / 小于→< / 小于等于→<= / 不等于→!= / 包含→in`（`translator.py:35`）|
+| **简略三元** | [[raw-docs/ADR-0003-v1-expression-subsystem §3.2]] | `a?b:c → (b) if (a) else (c)`（`translator.py:58`，**只翻译顶层**）|
+
+> **v1 状态锚点**（2026-06-15 实测）：上述 v1 自创词除 `bool_expr kind` 和 `range kind`（AST 扩展）外，其余都已在 [[raw-docs/ADR-0003-v1-expression-subsystem]]（commit `2a83774`）中落地。**唯一剩余工作 = `executor._execute_if` 接入 dispatcher**（v1-issue-6，GH #50），预计 ~30 行 executor.py 改动。
+
 ### 强约束 / 软约束族
 
 | 自创词 | 出处（原文） | 备注 |

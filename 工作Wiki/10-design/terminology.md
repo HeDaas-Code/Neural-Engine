@@ -57,18 +57,41 @@
 | `Evt` / `Cmd` | dataclass 子类 | [[raw-docs/ADR-0001-v0-baseline-script-spec §7.4]] / [[raw-docs/ADR-0001-v0-baseline-script-spec §7.3]] | 6 + 3 = 9 个具体类 |
 | `EngineBus` | 封装两个 Queue | [[raw-docs/ADR-0001-v0-baseline-script-spec §7.5]] | `bus.py` |
 
+### v1 数据类型代号（ADR-0003 / commit `2a83774` 已落地 v1-issue-1 骨架）
+
+> 这些是 v1 表达式子系统的具体类 / 常量 / 错误类。**v1-issue-1 骨架阶段已全部落地**（6 个 .py + 37 个测试）；**未接入 executor**（v1-issue-6 OPEN）。
+
+| 名字 | 类型 | 权威出处 | 出现处 |
+| --- | --- | --- | --- |
+| `ExprDispatcher` | 类（translator→simpleeval→fallback 调度器）| [[raw-docs/ADR-0003-v1-expression-subsystem §3.1]] | `core/engine/expr/dispatcher.py:32` |
+| `ExprDispatcher.eval_bool(expr: str) -> bool` | 方法 | [[raw-docs/ADR-0003-v1-expression-subsystem §3.1]] | `dispatcher.py:56` |
+| `ExprDispatcher.eval_int(expr: str) -> int` | 方法 | [[raw-docs/ADR-0003-v1-expression-subsystem §3.1]] | `dispatcher.py:72` |
+| `ExprDispatcher.eval(expr: str) -> object` | 方法（底层入口）| [[raw-docs/ADR-0003-v1-expression-subsystem §3.1]] | `dispatcher.py:76` |
+| `ExprTranslator` | 类（DSL → Python 翻译器）| [[raw-docs/ADR-0003-v1-expression-subsystem §3.2]] | `core/engine/expr/translator.py:67` |
+| `ExprTranslator.to_python_expr(dsl: str) -> str` | 方法 | [[raw-docs/ADR-0003-v1-expression-subsystem §3.2]] | `translator.py:86` |
+| `ExprTranslator.register_keyword(dsl_kw, py_expr)` | 方法 | [[raw-docs/ADR-0003-v1-expression-subsystem §3.2]] | `translator.py:79` |
+| `CustomExecutor` | 类（fallback + 业务侧扩展）| [[raw-docs/ADR-0003-v1-expression-subsystem §3.3]] | `core/engine/expr/custom.py:27` |
+| `CustomExecutor.register_function(name, fn)` | 方法 | [[raw-docs/ADR-0003-v1-expression-subsystem §3.3]] | `custom.py:46` |
+| `CustomExecutor.register_evaluator(pattern, handler)` | 方法 | [[raw-docs/ADR-0003-v1-expression-subsystem §3.3]] | `custom.py:72` |
+| `CustomExecutor.register_node(kind, handler)` | 方法（v2+ 占位，v1 抛 NotImplementedError）| [[raw-docs/ADR-0003-v1-expression-subsystem §3.3]] | `custom.py:60` |
+| `CustomExecutor.eval_fallback(py_expr, vars) -> object` | 方法 | [[raw-docs/ADR-0003-v1-expression-subsystem §3.3]] | `custom.py:85` |
+| `BUILTIN_FUNCS` | `dict[str, Callable]`（9 个函数白名单）| [[raw-docs/ADR-0003-v1-expression-subsystem §3.4]] | `core/engine/expr/builtin_funcs.py:13` |
+| `ExprError` | `RuntimeError` 子类 | [[raw-docs/ADR-0003-v1-expression-subsystem §3.5]] | `core/engine/expr/errors.py:13` |
+| `UnsupportedNodeError` | `ExprError` 子类（simpleeval fallback 信号）| [[raw-docs/ADR-0003-v1-expression-subsystem §3.5]] | `core/engine/expr/errors.py:22` |
+| `DSLSyntaxError` | `ParserError` 子类（继承 v0）| [[raw-docs/ADR-0003-v1-expression-subsystem §3.5]] | `core/engine/expr/errors.py:30` |
+
 > **命名空间映射**：变量命名空间出现在 `GameState`、`next_var_table` 键、`next_ref.var` 槽；ID 命名空间出现在 `Node.id`、`next_var_table` 值、`next_ref.id` 槽、`route_target`、ADR-0001 `id:xxx` 元数据。详见 [[namespace-semantics]]。
 
-## "不要用"清单（v0 不实现）
+## "不要用"清单（v0 不实现 / v1 已实现）
 
 | 概念 | 为什么不要 | 未来怎么用 |
 | --- | --- | --- |
 | ~~故事线~~ / ~~关卡~~ / ~~剧情线~~ | 概念混用 story/chapter/node | 用 story / chapter / node |
 | ~~剧情快照~~ / ~~撤销栈~~ / ~~可逆状态~~ | v0 不实现 | 未来用 snapshot |
 | ~~嵌入脚本~~ / ~~代码块~~ | v0 是 neon DSL | 用 neon DSL / 块内执行区 |
-| `Node` 子类（OOP） | v0 用 dataclass AST | 未来若要扩展 |
+| `Node` 子类（OOP）| v0 用 dataclass AST | 未来若要扩展 |
 | ~~NodeGraph~~ | v0 不实现 | 编辑器上下文用 |
-| 表达式求值器 | v0 不真做条件 | v2+ |
+| ~~表达式求值器~~ | v0 不真做条件（**`executor._execute_if` 永远选第一分支**——v0-issue-16 打桩）| **v1 已实现**（v1-issue-1 骨架 ✅，v1-issue-6 接入 executor 后真分支生效）|
 | 存档序列化 | v0 不实现 | v2+ |
 
 ## ID 命名 vs 变量命名的微妙之处

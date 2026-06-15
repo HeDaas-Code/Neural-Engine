@@ -38,7 +38,15 @@ src/core/
 │   ├── bus.py             # EngineBus 双向 Queue 封装（v0-issue-5）
 │   ├── interpreter.py     # neon 解析器（v0-issue-6/7/8/9/10/11/12）
 │   ├── executor.py        # GameState + Executor（v0-issue-13/14/15/16）
-│   └── main.py            # core 进程入口（v0-issue-17）
+│   ├── main.py            # core 进程入口（v0-issue-17）
+│   └── expr/              # ★ v1 表达式子系统（v1-issue-1 骨架，commit 2a83774）
+│       ├── __init__.py    #   公开 API（ExprDispatcher/Translator/CustomExecutor/ExprError）
+│       ├── errors.py      #   ExprError / DSLSyntaxError / UnsupportedNodeError
+│       ├── builtin_funcs.py # BUILTIN_FUNCS 白名单（9 个函数）
+│       ├── translator.py  #   DSL → Python 翻译器（Chinese 关键字 + 简略三元）
+│       ├── dispatcher.py  #   三层调度（translator→simpleeval→fallback）
+│       ├── custom.py      #   simpleeval 兜底 + 业务侧 register_* 钩子
+│       └── README.md      #   子系统说明
 └── decorators/
     ├── __init__.py        # 注册表
     └── style.py           # @style handler（v0-issue-15）
@@ -84,6 +92,26 @@ core ──零依赖──> editor, runtime
 | 阶段 9（端到端） | `#42` (v0-issue-19) | `chapters/chapter01.md` + fixture | `tests/integration/test_chapter01_e2e.py` |
 | 阶段 10（HITL 守护） | `#43` (v0-issue-20) | §11 10 条不变量 pytest + §8 MVP 勾 | `tests/test_mvp_table.py` |
 | 阶段 11（HITL 完工） | `#44` (v0-issue-21) | `docs/adr/0002-v0-engine-implementation.md` | 人工 review |
+
+## v1 实施路径（PRD-0002 / ADR-0003，2026-06-15 当前状态）
+
+> **v0 完工后启动 v1**——v1 阶段只动 `core` 上下文（不涉及 GUI / runtime / editor）。**v1-issue-1 骨架已完成**（commit `2a83774`，219/219 测试通过）；**v1-issue-2/3/4 已被骨架 commit 超额完成**；**v1-issue-5/6/7 仍未做**——其中 #6（dispatcher 接入 executor）是 v1 闭环的唯一卡点。
+
+| 阶段 | GH issue (v1-issue) | 输出 | 验证 | 实测 commit |
+| --- | --- | --- | --- | --- |
+| 阶段 12（v1 骨架） | `#52` (v1-issue-1) | `src/core/engine/expr/` 6 个 .py + 公开 API | `tests/core/test_expr_*.py`（37 用例）| ✅ `2a83774` |
+| 阶段 13（translator 真实现） | `#46` (v1-issue-2) | `Chinese 关键字` + `keyword_table` | `test_expr_translator.py`（11 用例）| ✅ 骨架 commit 已含（超额）|
+| 阶段 14（custom 真实现） | `#47` (v1-issue-3) | `register_function` / `register_evaluator` 完整 | `test_expr_custom.py`（8 用例）| ✅ 骨架 commit 已含（超额）|
+| 阶段 15（dispatcher 真实现） | `#48` (v1-issue-4) | 三层调度 + 错误捕获 | `test_expr_dispatcher.py`（10 用例）| ✅ 骨架 commit 已含（超额）|
+| 阶段 16（AST 扩 kind） | `#49` (v1-issue-5) | `If.cond` 加 `bool_expr` / `range` 两种 kind | AST 单测 | ❌ OPEN 未做 |
+| 阶段 17（executor 接入） | `#50` (v1-issue-6) | `executor._execute_if` 按 kind 分流：`var` 走 v0 / `bool_expr` 走 dispatcher.eval_bool / `range` 走 `lo<=v<=hi` | `test_executor_if.py` 真分支 | ❌ **OPEN 未做（v1 卡点）**|
+| 阶段 18（端到端） | `#51` (v1-issue-7) | `chapter01.md` `node if p_pick [...]` 真求值 + `tests/core/test_executor_if.py` 改名 `test_*_eval_*` + 移除 `_stub_*` | `tests/integration/test_chapter01_e2e.py` 真分支 | ❌ OPEN 未做 |
+| 阶段 19（HITL 完工） | TBD（v1-issue-8）| `docs/adr/0004-v1-expression-implementation.md` + audit | 人工 review | ❌ OPEN |
+
+**v1 实施关键观察**：
+- **0 偏差**——v1-issue-1 commit 对照 ADR-0003 §3 全部 14 个接口签名 + 错误类继承，**完全符合 spec**（v0 4 偏差不同——v1 实施更克制）。详见 [[../30-protocol/implementation-deviations#v1-issue-1-偏差审计-0-偏差]]。
+- **超额完成**——v1-issue-2/3/4 的真实现已在 v1-issue-1 骨架 commit 内一并落地，**spec 的工作量被压缩到 1 个 commit**。
+- **唯一卡点**——`executor._execute_if` 没动（v1-issue-6，GH #50）。`git diff 1a76382..HEAD -- src/core/engine/executor.py` **0 行变化**（`executor.py:227` 仍 `chosen = if_node.branches[0]`）。预计 ~30 行 executor.py 改动 + ~50 行 test 改名 = 1-2 小时即可 v1 闭环。
 
 ## 三路径 GUI 决策（v0-issue-18）
 

@@ -64,6 +64,10 @@ node start
 
 ## 完整事件流期望（输入序列 `["平静", "1"]`）
 
+> ⚠️ **v0 vs v1 双版本**——v0 阶段 `node if` 走打桩（永远选第一分支）；v1-issue-6 完成后走 dispatcher 真求值（按输入值选分支）。**当前生效 = v0 打桩**。
+
+### v0 事件流（`executor._execute_if` 走打桩路径）
+
 ```
 LoadChapterCmd("chapters/chapter01.md")
 
@@ -92,6 +96,60 @@ TextEvt("你打开门，雨中站着一个人。", "narration")
 ChapterEndEvt
 ```
 
+### v1 事件流（v1-issue-6 完成后，dispatcher 真求值）
+
+```
+LoadChapterCmd("chapters/chapter01.md")
+
+# === id:start 块 === （同 v0）
+...
+PromptInputEvt("p_mood")
+# GUI 发 UserInputCmd("平静")
+TextEvt("平静", "echo")
+# node end → NEXT=(None,"c1") 跳 c1
+
+# === id:c1 块 ===
+TextEvt("你听到门外传来两声敲门。", "narration")
+PromptInputEvt("p_pick")
+# GUI 发 UserInputCmd("1")
+# v1-issue-6: dispatcher.eval_bool("p_pick == 1") → True
+# 选 branch(value=1, target=t_a) → NEXT=(t_a, ca) 跳 ca
+
+# === id:ca 块 === （同 v0）
+...
+ChapterEndEvt
+```
+
+### v1 真分支覆盖的输入序列
+
+| 输入序列 | v0 走 | v1 走 | 说明 |
+| --- | --- | --- | --- |
+| `["平静", "1"]` | ca（永远第一分支）| ca | v0/v1 巧合一致 |
+| `["平静", "2"]` | ca（永远第一分支）| **cb** | v1 真分支生效 |
+| `["平静", "3"]` | ca（永远第一分支）| **echo p_pick** | v1 真分支生效（fallback 文本回显）|
+
+**v1 验收脚本**（v1-issue-7 OPEN）：
+
+```python
+import io
+from core.engine.executor import Executor, MemoryEventSink
+from core.engine.interpreter import parse_chapter
+from core.engine.ast_nodes import Story
+from core.engine.expr import ExprDispatcher, CustomExecutor
+
+state = ...  # GameState
+custom = CustomExecutor(state)
+dispatcher = ExprDispatcher(state, custom=custom)
+
+story = parse_chapter(open("chapters/chapter01.md").read())
+# 在 Executor 构造时注入 dispatcher（v1-issue-6 接入点）
+exe = Executor(story, sink, dispatcher=dispatcher)
+exe.run()
+
+# 断言：输入 "2" 走 cb 而不是 ca
+# 断言：TextEvt 序列里 cb 块的内容出现（"..." 在 ADR 附录 A 后续块）
+```
+
 ## fixture 涵盖的语法点
 
 | 语法点 | 出现位置 | 验收对应 issue |
@@ -103,15 +161,16 @@ ChapterEndEvt
 | `@style key:val` | id:start `@style bgm:rain.mp3` | `#34` (v0-issue-12) |
 | `node in ->var` | `node in ->p_mood` | `#37` (v0-issue-14) |
 | `node echo var` | `node echo p_mood` | `#37` (v0-issue-14) |
-| `node if var [...]` 多元 | `node if p_pick [...]` | `#33` (v0-issue-11) |
+| `node if var [...]` 多元 | `node if p_pick [...]` | `#33` (v0-issue-11) / **v1-issue-6 真求值**|
 | 分支项内 echo 占位 | `3:echo p_pick` | `#33` (v0-issue-11) |
 | 整行注释 | `# 入口块：...` | `#29` (v0-issue-7) |
 | node end + NEXT 跳转 | id:start 末尾 | `#37` (v0-issue-14) |
 | 普通 `node end` 广播 chapter_end | id:ca 末尾 | `#39` (v0-issue-16) |
 
-→ 相关：[[../40-issues/dashboard]] / [[../40-issues/dependency-graph]] / `#42` (v0-issue-19)
+→ 相关：[[../40-issues/dashboard#v1-表达式子系统-prd-0002--adr-0003]] / [[../40-issues/dependency-graph]] / [[../20-architecture/state-machine#v1-v1-issue-6open-待实现]] / `#42` (v0-issue-19) / `#51` (v1-issue-7)
 
 ## 引用源
 
 - ADR-0001 附录 A —— [[raw-docs/ADR-0001-v0-baseline-script-spec]]
 - v0-issue-19 工程笔记 —— [[raw-docs/工程笔记/v0-issue-19-fixture.md]]
+- ADR-0003 v1 表达式子系统 —— [[raw-docs/ADR-0003-v1-expression-subsystem §2 决策 4]]（`If.cond` kind 扩展）

@@ -2,6 +2,7 @@
 
 v0-issue-6 第一阶段：extract_neon_blocks（只拆围栏，不解析内容）
 v0-issue-7 第二阶段：parse_block_skeleton（识别 node start/end 边界）
+v0-issue-11 第六阶段：parse_if_stmt（node if 解析 + branch 项解析）
 
 约定（ADR §2.1 / §6）：
 - 只匹配精确 ```` ```neon ````（不支持 ```` ```Neon ```` / ```` ```NEON ```` 变体）
@@ -9,6 +10,12 @@ v0-issue-7 第二阶段：parse_block_skeleton（识别 node start/end 边界）
 - 围栏外忽略
 - 整行注释（行首 ``#``）跳过
 - 空行跳过
+
+v1 指针（ADR-0003）：
+- parse_if_stmt 解析 If.cond 仍为 (kind, name) 形态
+- v1-issue-6: executor._execute_if 接入 ExprDispatcher 求值
+- v1-issue-6 后, If.cond 新增 "bool_expr" / "range" 两种 kind
+- 本文件 v0 公开 API 保持不变 (向后兼容)
 """
 from __future__ import annotations
 

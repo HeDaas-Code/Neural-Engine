@@ -1,11 +1,12 @@
 # 40 · Issue 依赖图
 
-> **TL;DR**：v0 实施依赖是一条主链——`#23 → #24/#25 → #27 → #28 → #29 → #30/#32 → #31/#33/#34/#36 → #37/#38 → #39 → #40 → #42 → #43/#44`，阶段 1 起可部分并行。（**全部用 GH issue 编号**——HITL 是 GH #43 / #44，不是 v0-issue-20 / 21）
+> **TL;DR**：v0 实施依赖是一条主链——`#23 → #24/#25 → #27 → #28 → #29 → #30/#32 → #31/#33/#34/#36 → #37/#38 → #39 → #40 → #42 → #43/#44`，阶段 1 起可部分并行；v1 子图是独立链——`#52 → #46-49 → #50 → #51`，**#50 是 v1 闭环唯一卡点**。（**全部用 GH issue 编号**——HITL 是 GH #43 / #44 / ADR-0004，不是 v0-issue-20 / 21 / v1-issue-8）
 
-## 依赖图（Mermaid）
+## 依赖图（Mermaid，v0 + v1 双子图）
 
 ```mermaid
 flowchart LR
+    %% v0 subgraph
     P23["#23 仓库骨架"]
     P24["#24 AST"]
     P25["#25 Cmd"]
@@ -55,9 +56,31 @@ flowchart LR
     P27[M40] --> G41
     F42 --> H43
     F42 --> H44
+
+    %% v1 subgraph (独立链) - 当前状态 2026-06-15
+    V52["#52 v1-issue-1 骨架 (DONE)"]
+    V46["#46 v1-issue-2 translator (骨架已超额)"]
+    V47["#47 v1-issue-3 custom (骨架已超额)"]
+    V48["#48 v1-issue-4 dispatcher (骨架已超额)"]
+    V49["#49 v1-issue-5 AST 扩 kind"]
+    V50["#50 v1-issue-6 executor 接 dispatcher ★ 卡点"]
+    V51["#51 v1-issue-7 端到端真分支"]
+    V53["#53 父 PRD"]
+
+    V52 --> V46
+    V52 --> V47
+    V52 --> V48
+    V46 --> V49
+    V49 --> V50
+    V50 --> V51
+    V51 -.HITL.-> H44_2["ADR-0004 (v1 完工)"]
+    V53 -.父.-> V52
+
+    %% v0 -> v1 桥 (v0 闭环后启动 v1)
+    H44 -.v0 闭环后启动 v1.-> V53
 ```
 
-## 串行主链（最短完工路径）
+## v0 串行主链（最短完工路径，已闭环）
 
 ```
 #23 → #24 → #28 → #29 → #30 → #31 → #36 → #37 → #39 → #42 → #43
@@ -67,7 +90,21 @@ flowchart LR
                             ↓ #38 在 #37 后可与 #39 并行
 ```
 
-## 可并行的批次
+## v1 串行主链（最短闭环路径）
+
+```
+#52 (v1-issue-1 骨架) ─┬→ #46 (translator, 已超额) ─┐
+                       ├→ #47 (custom, 已超额) ─────┼→ #49 (AST 扩 kind) → #50 (executor 接入 ★ 卡点) → #51 (端到端) → ADR-0004
+                       └→ #48 (dispatcher, 已超额) ─┘
+```
+
+**v1 关键观察**：
+- **#52 单 commit 完成 4 个 issue 的真实现**——骨架 commit `2a83774` 同时含 translator / custom / dispatcher 的完整实现
+- **#50 是 v1 闭环唯一卡点**——`executor._execute_if` 按 `If.cond` kind 分流（`var` 走 v0 / `bool_expr` 走 dispatcher.eval_bool / `range` 走 `lo<=v<=hi`）
+- **#51 几乎零成本**——chapter01.md fixture 不动（已有 node if）+ `tests/core/test_executor_if.py` 改名 `*_stub_*` → `*_eval_*` + 加真分支断言
+- **总工作量**：~3 个 issue × ~50 行 = 1-2 小时即可 v1 闭环
+
+## 可并行的批次（v0）
 
 | 批次 | 可同时开工 | 说明 |
 | --- | --- | --- |
@@ -86,7 +123,7 @@ flowchart LR
 | Batch M | `#42` | 依赖 #39（端到端 fixture 需要完整 executor）|
 | Batch N | `#43` `#44` | 都依赖 #42（HITL 完工关卡，需 owner）|
 
-## 关键检查点
+## v0 关键检查点
 
 1. **#23 完成**——仓库骨架就位，所有后续 PR 有落地处
 2. **#29 完成**——neon 围栏拆出来，解析器可以开始
@@ -95,6 +132,15 @@ flowchart LR
 5. **#39 完成**——v0 唯一跑通路径在引擎侧就绪
 6. **#42 完成**——端到端集成测试通过，差 GUI
 7. **#43 / #44 完成**（HITL）——v0 完工（需 owner 亲自跑 grep 守护 + 写 ADR-0002）
+
+## v1 关键检查点（2026-06-15 实测状态）
+
+1. ✅ **#52 完成**——v1-issue-1 骨架落地（commit `2a83774`，6 个 .py + 37 用例）
+2. ⚠️ **#46/#47/#48 已超额完成**——骨架 commit 内含完整实现，但 GH issue 仍 OPEN（owner 必审查 close）
+3. ❌ **#49 OPEN**——`If.cond` 扩 `bool_expr` / `range` 两种 kind（interpreter.py + ast_nodes.py 改 ~30 行）
+4. ❌ **#50 OPEN（v1 卡点）**——`executor._execute_if` 接入 `ExprDispatcher`（executor.py 改 ~30 行）
+5. ❌ **#51 OPEN**——端到端真分支（test 改名 + 新增真分支断言 ~50 行）
+6. ❓ **ADR-0004 HITL**——v1 完工记录（待 owner 拍板）
 
 ## 关键设计决策（来自工程笔记）
 
@@ -105,5 +151,8 @@ flowchart LR
 | PyQt6 可选，三路径 GUI | v0-issue-18 |
 | 路径 B 默认（CLI fallback）| v0-issue-18 |
 | §11 #3 用 `grep -r '"NEXT"' src/` pytest 守护 | v0-issue-20 |
+| v1 表达式子系统独立成 `core.engine.expr/` 子包（与 interpreter/executor 平级）| v1-issue-1 |
+| 三层兜底（translator→simpleeval→fallback）| v1-issue-1 |
+| `("var", name)` v0 形态保留兼容（不进 dispatcher）| v1-issue-1 / ADR-0003 §2 决策 4 |
 
-→ 相关：[[dashboard]] / [[../50-fixtures/chapter01]]
+→ 相关：[[dashboard]] / [[../50-fixtures/chapter01]] / [[../20-architecture/state-machine#v1-v1-issue-6open-待实现]]
