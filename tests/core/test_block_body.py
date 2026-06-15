@@ -9,7 +9,7 @@ import pytest
 REPO_ROOT = "/home/hedaas/桌面/Neural Engine"
 sys.path.insert(0, f"{REPO_ROOT}/src")
 
-from core.engine.ast_nodes import NextDecl  # noqa: E402
+from core.engine.ast_nodes import NextDecl, DecoratorCall  # noqa: E402
 from core.engine.interpreter import parse_block_body, BlockMeta  # noqa: E402
 from core.engine.ast_nodes import (  # noqa: E402
     Start, End, Text, In, Echo, NextId, If, ParserError,
@@ -76,15 +76,14 @@ def test_plain_text_line_becomes_text_node():
     assert isinstance(nodes[2], Text) and nodes[2].content == "敲门声。\n"
 
 
-# 6. @xxx 保留
+# 6. @xxx → DecoratorCall/Stop（v0-issue-12 已解析，不再保留为 Text）
 def test_decorator_line_preserved_for_issue_12():
-    # 本 issue 看到 @ 行→ 原样保留（不抛错，不解析）
-    # 解析器应该: 当遇到 @ 行→ 包成 Text 节点（保留原样）—— 给 v0-issue-12 二次处理
     lines = ["node start\n", "@style bgm:rain\n", "node end\n"]
     nodes = parse_block_body(lines, start_lineno=10, block_meta=_empty_meta())
-    # @ 行原样保留为 Text（v0-issue-12 会二次处理为 DecoratorCall/DecoratorStop）
-    assert isinstance(nodes[1], Text)
-    assert "@style bgm:rain" in nodes[1].content
+    # bgm:rain 是 key:val → DecoratorCall
+    assert isinstance(nodes[1], DecoratorCall)
+    assert nodes[1].name == "style"
+    assert nodes[1].args == ("bgm:rain",)
 
 
 # 7. 缺 node start

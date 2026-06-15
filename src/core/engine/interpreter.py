@@ -19,6 +19,7 @@ from core.engine.ast_nodes import (
     ParserError, BlockLocation, NextDecl,
     Start, End, Text, In, Echo, NextId,
     If, Branch, CallExpression,
+    DecoratorCall, DecoratorStop,
 )
 
 
@@ -420,8 +421,8 @@ def _parse_body_line(line: str, lineno: int):
             loc=BlockLocation(lineno=lineno, col=1),
         )
     if s.startswith("@"):
-        # 修饰器行：保留为 Text，v0-issue-12 二次处理
-        return Text(content=line)
+        # 修饰器行：v0-issue-12 解析
+        return parse_decorator(line, lineno)
     if s == "":
         # 空行（v0-issue-7 应该已跳过，但防御性）
         return None
@@ -614,3 +615,59 @@ def parse_if_stmt(
         f"malformed 'node if' at line {lineno}: {s!r}",
         loc=BlockLocation(lineno=lineno, col=1),
     )
+
+
+# ─── 第七阶段：修饰器解析 ─────────────────────────────────────────────────────
+
+
+_DECOR_NAME_RE = re.compile(r"^([a-z_]\w*)$")
+
+
+def parse_decorator(line: str, lineno: int):
+    """解析 @xxx 修饰器行，返回 DecoratorCall 或 DecoratorStop。
+
+    判定规则：
+    - 所有 args 都是裸 key（无 ':'）→ DecoratorStop(name=xxx, key=first_key)
+    - 任一 arg 含 ':' → DecoratorCall(name=xxx, args=(...))
+    - 无 args → DecoratorStop(name=xxx, key="")
+
+    错误：
+    - 缺名（@ 后空）→ ParserError
+    - 非法名（非 snake_case）→ ParserError
+    """
+    s = line.strip()
+    if not s.startswith("@"):
+        raise ParserError(
+            f"line does not start with '@' at line {lineno}",
+            loc=BlockLocation(lineno=lineno, col=1),
+        )
+    rest = s[1:].strip()
+    if not rest:
+        raise ParserError(
+            f"empty decorator name at line {lineno}",
+            loc=BlockLocation(lineno=lineno, col=1),
+        )
+
+    # 拆 name + rest tokens（按空白切分，args 按逗号）
+    parts = rest.split(None, 1)
+    name = parts[0]
+    args_str = parts[1] if len(parts) > 1 else ""
+
+    if not _DECOR_NAME_RE.match(name):
+        raise ParserError(
+            f"invalid decorator name {name!r} at line {lineno}",
+            loc=BlockLocation(lineno=lineno, col=1),
+        )
+
+    # 拆 args（按逗号 + 可选空格）
+    if args_str.strip() == "":
+        return DecoratorStop(name=name, key="")
+
+    args = tuple(a.strip() for a in args_str.split(",") if a.strip())
+
+    # 判定 call vs stop
+    all_bare = all(":" not in a for a in args)
+    if all_bare:
+        # stop：用第一个 key
+        return DecoratorStop(name=name, key=args[0])
+    return DecoratorCall(name=name, args=args)
