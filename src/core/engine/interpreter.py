@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-from core.engine.ast_nodes import ParserError, BlockLocation
+from core.engine.ast_nodes import ParserError, BlockLocation, NextDecl
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,3 +288,79 @@ def parse_block_meta(meta_lines: list[str], start_lineno: int) -> BlockMeta:
             seen_ids.add(spec.id)
         specs.append(spec)
     return BlockMeta(ids=specs, start_lineno=fence_lineno)
+
+
+# ─── 第四阶段：next 声明解析 ──────────────────────────────────────────────────
+
+
+def _parse_next_line(line: str, lineno: int) -> NextDecl:
+    """解析 'next:xxx' 或 'yyy <-next:xxx' 单行。"""
+    s = line.strip()
+    if "<-next:" in s:
+        # yyy <-next: xxx
+        var_part, target_part = s.split("<-next:", 1)
+        var_name = var_part.strip()
+        target_id = target_part.strip()
+        if not var_name:
+            raise ParserError(
+                f"empty variable name in next decl at line {lineno}",
+                loc=BlockLocation(lineno=lineno, col=1),
+            )
+        return NextDecl(var_name=var_name, target_id=target_id, lineno=lineno)
+    elif s.startswith("next:"):
+        # next: xxx
+        target_id = s[len("next:"):].strip()
+        if not target_id:
+            raise ParserError(
+                f"empty target in next decl at line {lineno}",
+                loc=BlockLocation(lineno=lineno, col=1),
+            )
+        return NextDecl(var_name=None, target_id=target_id, lineno=lineno)
+    else:
+        raise ParserError(
+            f"unexpected meta line {s!r} at line {lineno}",
+            loc=BlockLocation(lineno=lineno, col=1),
+        )
+
+
+def parse_next_decls(
+    meta_lines: list[str],
+    start_lineno: int,
+) -> list[NextDecl]:
+    """解析元数据区 next 声明 + 互斥校验。
+
+    - 单 next（0 或 1 条）：bare / named 都允许
+    - 多 next（2+ 条）：必须全 named；bare 混合 → ParserError
+    - 重复 var_name → ParserError
+    - 重复 target_id：合法
+
+    命名规则严格校验留给 executor。
+    """
+    decls: list[NextDecl] = []
+    fence_lineno = start_lineno
+    for i, line in enumerate(meta_lines):
+        lineno = fence_lineno + 1 + i
+        decls.append(_parse_next_line(line, lineno))
+
+    # 互斥校验
+    if len(decls) >= 2:
+        bare_count = sum(1 for d in decls if d.var_name is None)
+        if bare_count > 0:
+            raise ParserError(
+                f"bare 'next:' not allowed with {len(decls)}>1 next decls "
+                f"at line {fence_lineno}",
+                loc=BlockLocation(lineno=fence_lineno, col=1),
+            )
+    # 重复 var_name
+    seen: set[str] = set()
+    for d in decls:
+        if d.var_name is None:
+            continue
+        if d.var_name in seen:
+            raise ParserError(
+                f"duplicate next var {d.var_name!r} at line {d.lineno}",
+                loc=BlockLocation(lineno=d.lineno, col=1),
+            )
+        seen.add(d.var_name)
+
+    return decls
