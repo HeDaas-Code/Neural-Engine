@@ -18,6 +18,7 @@ from core.engine.ast_nodes import (
 from core.engine.protocol import (
     RouteEvt, ChapterEndEvt,
     TextEvt, PromptInputEvt, UserInputCmd,
+    DecoratorEvt,
 )
 
 
@@ -76,6 +77,7 @@ class Executor:
         self.state = GameState()
         self._entry_id = entry_id
         self.next: tuple = None  # NEXT 跳转目标
+        self._deco_state: dict = {}  # v0-issue-15 修饰器状态 {name: {key: val}}
         # 跨块 ID 校验：所有 next_table target_id + NextId 目标 + if 分支目标 必须在 story
         self._validate_target_ids()
 
@@ -146,7 +148,9 @@ class Executor:
         return self._find_block_by_id(target_id)
 
     def run_block(self, block: Block) -> None:
-        """单块执行：v0-issue-14 实现 Text/In/Echo/NextId。"""
+        """单块执行：v0-issue-14 实现 Text/In/Echo/NextId，v0-issue-15 修饰器。"""
+        # v0-issue-15: 块级作用域——进入时清空（不变量 #2）
+        self._deco_state.clear()
         # 初始化 next_table
         self.state.next_table = {
             d.var_name: d.target_id
@@ -182,10 +186,29 @@ class Executor:
             if isinstance(node, NextId):
                 self.next = (None, node.target_id)
                 continue
-            # 留给 v0-issue-15/16
+            if isinstance(node, DecoratorCall):
+                self._emit_decorator(node)
+                continue
+            if isinstance(node, DecoratorStop):
+                self._emit_decorator(node)
+                continue
+            # 留给 v0-issue-16
             raise NotImplementedError(
-                f"node not yet implemented in v0-issue-14: {type(node).__name__}"
+                f"node not yet implemented in v0-issue-15: {type(node).__name__}"
             )
+
+    def _emit_decorator(self, deco) -> None:
+        """v0-issue-15: 调度修饰器调用 / 休止符。"""
+        if isinstance(deco, DecoratorCall):
+            for arg in deco.args:
+                if ":" in arg:
+                    k, v = arg.split(":", 1)
+                    self._deco_state.setdefault(deco.name, {})[k] = v
+            self.sink.put_evt(DecoratorEvt(name=deco.name, args=list(deco.args)))
+        elif isinstance(deco, DecoratorStop):
+            if deco.name in self._deco_state:
+                self._deco_state[deco.name].pop(deco.key, None)
+            self.sink.put_evt(DecoratorEvt(name=deco.name, args=[deco.key]))
 
     def _handle_end(self, block: Block) -> None:
         """处理 node end：NEXT 跳转 / RouteEvt / ChapterEndEvt / RuntimeError。"""
