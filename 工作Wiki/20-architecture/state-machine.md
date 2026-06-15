@@ -72,9 +72,9 @@ node end                    # NEXT = (None, "c1") 非空 → 跳到 id:c1
                             # decorator_state 不在此清空（v0-issue-15 改到 node start 清）
 ```
 
-## `node if` 打桩细节
+## `node if` 决策细节（v0 打桩 / v1 真求值）
 
-v0 不真做条件判断：
+### v0（v0-issue-16，**当前生效**）：
 
 ```neon
 node if p_pick [1:t_a, 2:t_b, 3:echo p_pick]
@@ -82,12 +82,40 @@ node if p_pick [1:t_a, 2:t_b, 3:echo p_pick]
 
 **解析时**（v0-issue-11）：构造 `If(cond="p_pick", branches=[Branch(1, NextDecl("t_a")), Branch(2, NextDecl("t_b")), Branch(3, Echo("p_pick"))])`
 
-**执行时**（v0-issue-16）：
+**执行时**（v0-issue-16，**打桩路径**）：
 1. **永远选第一个分支**（按 `value` 排序最小）
 2. 广播 `LogEvt(level="info", message="条件打桩")`
 3. 把分支项解析为 `NEXT`：
    - `1:t_a` → NEXT = `("t_a", "ca")`（变量名槽=t_a，ID 槽=ca，通过 next_table 解析）
    - `3:echo p_pick` → NEXT = `("echo", None)`（v0 打桩语义）
+
+**代码位置**：`src/core/engine/executor.py:227 _execute_if`（commit `abb67ab`，自 v0 完工后**0 行变化**——v1-issue-6 OPEN）。
+
+### v1（v1-issue-6，**OPEN 待实现**）：
+
+```
+If.cond = ("bool_expr", "p_tall >= 18 且 p_age == 1")
+         ↓ _execute_if 按 kind 分流
+dispatcher = ExprDispatcher(game_state, custom=CustomExecutor(state))
+result = dispatcher.eval_bool("p_tall >= 18 and p_age == 1")
+         ↓ 按 branch.value 选第一个 match
+chosen = first(branch for branch in if_node.branches if result.matches(branch.value))
+         ↓ 解析 target（同 v0）
+self.next = (target.var_name, target.target_id) if isinstance(target, NextDecl) else ...
+```
+
+**v1 真分支的 3 个 kind 分流**：
+
+| kind | v1 处理 |
+| --- | --- |
+| `"var"` | **保持 v0 兼容**——`state.vars[cond[1]] == branch.value`，**不进 dispatcher** |
+| `"bool_expr"` | `dispatcher.eval_bool(payload)` → 选第一个 `result == branch.value` 的分支 |
+| `"expr"` | `dispatcher.eval_bool(payload)`（简略三元 `[a?b:c]` 走 `_SHORTCUT_TERNARY_RE` 翻译）|
+| `"range"` | `lo <= state.vars[???] <= hi`（v2+，v1 不实现）|
+
+**预估改动量**：~30 行 executor.py + 1 个 dispatcher 注入点（构造时或 `run_block` 入口）+ ~50 行测试改名（`*_stub_*` → `*_eval_*`）。
+
+> **详细 v1 路线图**见 [[../40-issues/dashboard#v1-表达式子系统-prd-0002--adr-0003]]。**CodeGraph 唯一卡点确认**：`ExprDispatcher` 公开 API 已有，但**仅被测试调用**——`executor.py` 没 import `core.engine.expr.*`，所以 dispatcher 真值根本走不到 v0 的 `node if` 分支。
 
 ## 块级作用域 vs 跨块继承
 

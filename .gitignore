@@ -6,3 +6,4 @@ __pycache__/
 venv/
 .codegraph/    # CodeGraph SQLite 索引（不在仓库内共享；每个开发者本地 init）
 .obsidian/     # Obsidian 本地配置
+.obsidian/**   # 显式递归匹配（git 对带尾 / 的目录模式某些场景不生效）

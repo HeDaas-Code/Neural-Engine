@@ -158,9 +158,8 @@
 - 22 + 8 = 30 个 GH issue —— `gh issue list --repo HeDaas-Code/Neural-Engine`
 - 19 个 v0 feat commit + 1 个 v1 骨架 commit —— `git log --oneline`（v0 HEAD = `c1844d9`，v1 HEAD = `50747ec`）
 - pytest 结果 —— `python -m pytest tests/ -q`（**219 passed**）
-- [[40-issues/dashboard]] — 22 v0 + 8 v1 issue 总览
-- [[60-v1-roadmap]] — v1 路线图（v1-issue-1 骨架 + 5 个 issue OPEN）
-- [[dependency-graph]] — v0 实施路径图
+- [[40-issues/dashboard]] — 22 v0 + 8 v1 issue 总览（v1 路线图合并在本节）
+- [[dependency-graph]] — v0 + v1 双子图
 
 ## 路径 B GUI 实测
 
@@ -169,12 +168,63 @@
 | **spec** | v0-issue-18：PyQt6 装了走 A，没装走 B；A 用 QMainWindow/QPlainTextEdit/QLineEdit |
 | **实际** | **只实现路径 B**（CLI print+input），路径 A 完全没写 —— `runtime/gui/main.py` 1712 字节，纯 print + input |
 | **commit** | `33a51ad feat: 落地 v0-issue-18 GUI CLI 占位` |
-| **影响** | 路径 A 推迟到 v1（注释里写明："v1 阶段：路径 A（PyQt6 窗口）按 `importlib.util.find_spec("PyQt6")` 切换"） |
+| **影响** | 路径 A 推迟到 v1（注释里写明："v1 阶段：路径 A（PyQt6 窗口）按 `importlib.util.find_spec("PyQt6")` 切换"）|
 | **评估** | 🟢 合理 —— v0 不强装 PyQt6，路径 B 足以验证 EngineBus 协议层。spec 给 A/B/C 三选项，A 在 v0 跳过符合 v0-issue-18 acceptance "PyQt6 可选" 决策。 |
 
-## 主循环 main.py 实测
+## v1-issue-1 偏差审计（实测 0 偏差）
 
-`core/engine/main.py` 装配流程（4 步）：
+> **v1-issue-1 骨架 commit `2a83774` 对照 ADR-0003 §3 全部 14 个接口签名 + 错误类继承，0 偏差**。这是 v0（4 偏差）以来第一次"完美对齐 spec"的 commit——实施 agent 明显更克制。
+
+| ADR-0003 §3 接口 | 实现 | 符合 |
+|---|---|---|
+| `ExprDispatcher(state, custom=None, translator=None)` | `dispatcher.py:32` 签名一致（+ `translator=None` 参数）| ✅ |
+| `eval_bool(expr: str) -> bool` | `dispatcher.py:56` 签名一致 | ✅ |
+| `eval_int(expr: str) -> int` | `dispatcher.py:72` 签名一致 | ✅ |
+| `eval(expr: str) -> object` | `dispatcher.py:76` 签名一致 | ✅ |
+| `ExprTranslator(keyword_table=None)` | `translator.py:75` 签名一致 | ✅ |
+| `register_keyword(dsl_kw, py_expr)` | `translator.py:79` 签名一致 | ✅ |
+| `CustomExecutor(state)` | `custom.py:39` 签名一致 | ✅ |
+| `register_function(name, fn)` | `custom.py:46` 签名一致 | ✅ |
+| `register_evaluator(pattern, handler)` | `custom.py:72` 签名一致 | ✅ |
+| `eval_fallback(py_expr, vars) -> object` | `custom.py:85` 签名一致 | ✅ |
+| `BUILTIN_FUNCS` 含 `len/int/str/float/min/max/abs/round/bool` | `builtin_funcs.py:13` 全部 9 个 | ✅ |
+| `ExprError` 继承 `RuntimeError` | `errors.py:13` 继承一致 | ✅ |
+| `DSLSyntaxError` 继承 `ParserError` | `errors.py:30` 继承一致 | ✅ |
+| `UnsupportedNodeError(ExprError)` | `errors.py:22` 继承一致 | ✅ |
+| `register_node` v2+ 占位（NotImplementedError）| `custom.py:60` raise NotImplementedError | ✅ |
+
+**实测覆盖**（v1-issue-1 commit `2a83774` 附带的测试）：
+- `test_expr_translator.py` — 11 用例（Chinese 关键字 + 简略三元 + keyword_table + 失败路径）
+- `test_expr_dispatcher.py` — 10 用例（bool/int/eval/错误类型/names 引用同步）
+- `test_expr_custom.py` — 8 用例（register_function/evaluator + eval_fallback 顺序）
+- **合计 29 新增 v1 用例**，pytest **219/219 全过**。
+
+**唯一剩余偏差 = 接入卡点**（不是真偏差，是 spec 没要求 v1-issue-1 改 executor）：
+
+| 维度 | 内容 |
+|---|---|
+| **spec** | ADR-0003 §4 步骤 6：`executor._execute_if` 接 dispatcher（v1-issue-6 范围）|
+| **实际** | v1-issue-1 commit **0 行变化** executor.py（`git diff 1a76382..2a83774 -- src/core/engine/executor.py`）|
+| **commit** | `2a83774` |
+| **影响** | v1-issue-6 是 spec 划清的"v1 闭环卡点"——和 v0-issue-1 留 stage 2+ 解析器一样，**按计划推进**而非偏差 |
+| **评估** | 🟢 **符合 spec**——v1-issue-1 spec 没要求改 executor，v1-issue-6 才明确"executor._execute_if 接入 ExprDispatcher" |
+
+→ **v1-issue-6（dispatcher 接入 executor，GH #50）= v1 闭环的唯一卡点**。详见 [[../20-architecture/state-machine#v1-v1-issue-6open-待实现]]。
+
+## v1 实施覆盖（CodeGraph 调用关系，2026-06-15 实测）
+
+```
+ExprTranslator.to_python_expr  ←── ExprDispatcher.eval（✅ 内部连通）
+ExprDispatcher                  ←── tests/test_expr_dispatcher.py + __init__.py import
+                                   （❌ executor._execute_if 没接入）
+executor._execute_if            ←── run_block（❌ 仍 v0 打桩）
+```
+
+**实测**：`grep -l "from core.engine.expr" src/` → **0 命中**（executor.py 没 import 表达式子系统）。
+
+## 主循环 main.py 装配流程（v0-issue-17 实测）
+
+`core/engine/main.py`（commit `12c2c6c`）6 步装配：
 
 1. `_try_spawn_gui()` —— `subprocess.Popen([sys.executable, "-m", "runtime.gui.main"])` + `FileNotFoundError` 容错
 2. `EngineBus(use_multiprocessing=True)` —— default 注入 multiprocessing.Queue
@@ -183,9 +233,7 @@
 5. `Executor(story, bus).run()` — 阻塞跑完整个故事
 6. 收尾：`bus.close()` + `gui_proc.terminate()` + `gui_proc.wait(timeout=2)`
 
-**注意**：main.py **不**消费 `LoadChapterCmd` / `ShutdownCmd` —— chapter_path 是 CLI 参数，GUI 进程启动后只通过 EngineBus 收事件 + 发 `UserInputCmd`。这意味着 `LoadChapterCmd` schema 当前**仅被协议层使用**，main 没读它。
-
-→ 这是**实际偏差**：v0-issue-17 spec 描述了 "Engine 主循环：1. `Executor.run()` 启动 2. 收到 `ShutdownCmd` → 退出 0"，但**实际** main.py 只走 CLI arg 路径，**不**监听 cmd_q。路径 B GUI 不发 LoadChapterCmd（直接 spawn 后听事件），所以不冲突。
+**注意**：main.py **不**消费 `LoadChapterCmd` / `ShutdownCmd`——chapter_path 是 CLI 参数，GUI 进程启动后只通过 EngineBus 收事件 + 发 `UserInputCmd`。这意味着 `LoadChapterCmd` schema 当前**仅被协议层使用**，main 没读它（详见下面 v0-issue-17 偏差段）。
 
 ## v0-issue-17 main.py 不读 cmd_q —— 偏差
 
@@ -242,6 +290,5 @@
 - 22 + 8 = 30 个 GH issue —— `gh issue list --repo HeDaas-Code/Neural-Engine`
 - 19 个 v0 feat commit + 1 个 v1 骨架 commit —— `git log --oneline`（v0 HEAD = `c1844d9`，v1 HEAD = `50747ec`）
 - pytest 结果 —— `python -m pytest tests/ -q`（**219 passed**）
-- [[40-issues/dashboard]] — 22 v0 + 8 v1 issue 总览
-- [[60-v1-roadmap]] — v1 路线图（v1-issue-1 骨架 + 5 个 issue OPEN）
-- [[dependency-graph]] — v0 实施路径图
+- [[40-issues/dashboard]] — 22 v0 + 8 v1 issue 总览（v1 路线图合并在本节）
+- [[dependency-graph]] — v0 + v1 双子图

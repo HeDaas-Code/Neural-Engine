@@ -98,12 +98,12 @@ class NextId:
     target_id: str                     # 显式跳转：NEXT = target_id
 ```
 
-### 条件节点（v0 打桩）
+### 条件节点（v0 打桩 / v1 真求值）
 
 ```python
 @dataclass(frozen=True, slots=True)
 class If:
-    cond: tuple[str, str]              # (kind, name)：kind="var"|"expr"
+    cond: tuple[str, str | tuple]      # (kind, payload)：v0 kind="var"|"expr"；v1 +"bool_expr"|"range"
     branches: tuple[Branch, ...]
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +117,17 @@ class CallExpression:                  # ⚠️ 新增包装类（spec 没有，
     kind: str                          # "echo" | "in"
     var: str
 ```
+
+**`If.cond` 的 kind 取值（v0 已落地 / v1 扩展中）**：
+
+| kind | payload | 含义 | v0 处理 | v1 处理（v1-issue-5 OPEN）|
+| --- | --- | --- | --- | --- |
+| `"var"` | 变量名（str）| 单变量名 vs branch.value 比较 | `_execute_if` 永远选第一分支（v0 打桩）| **保持 v0 兼容**——仍走"值匹配"，不进 dispatcher |
+| `"expr"` | 表达式（str）| 简略二元 `[a?b:c]` | 同上（v0 打桩）| `dispatcher.eval_bool(payload)` 真求值（v1-issue-6）|
+| `"bool_expr"` | 表达式（str）| 多元条件 `[1:ce1, 2:ce2]` | ❌ v0 不支持（解析为 `expr` kind）| `dispatcher.eval_bool(payload)` 真求值（v1-issue-6）|
+| `"range"` | `(lo, hi)` 元组 | 范围匹配 `[1~10:ce_ok]` | ❌ v0 不支持 | `lo <= v <= hi` 真求值（v2+，**v1 不实现**）|
+
+> **v0/v1 兼容约束**（[[raw-docs/ADR-0003-v1-expression-subsystem §2 决策 4]]）：`("var", name)` 形态**保留**——v0 fixture 不受影响；v1-issue-6 接入时只在 `bool_expr` / `expr` / `range` 三种 kind 上分流。
 
 ### 修饰器节点
 
@@ -164,6 +175,7 @@ ID_START = IdStart()
 | §6 注释 | 解析器跳过 `#` 行，**不进 AST** |
 | §11 #1 命名空间分离 | 解析器在 body 里遇到 `IdMeta` 必须报 `ParserError` |
 | §11 #10 分支项省略 node | ⚠️ spec 是 `Branch.target: NextDecl \| Echo \| In`，实现用 `CallExpression`（详见 D-NEW-1）|
+| ADR-0003 §2 决策 4 | `If.cond` 扩 `bool_expr` / `range` 两种 kind（v1-issue-5 OPEN 未做）|
 
 ## 验收（v0-issue-2 acceptance，已实测）
 

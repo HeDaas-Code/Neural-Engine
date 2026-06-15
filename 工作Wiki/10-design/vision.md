@@ -47,7 +47,7 @@
 ## 关键里程碑
 
 1. **M1（v0 完工 ✅）**——22/22 GH issue 全部 closed（commit `125f237`），182/182 测试通过，docs/adr/0002-v0-engine-implementation.md + docs/audit/v0-invariant-audit.md 发布。
-2. **M2（v1 表达式子系统 ⏳ 部分）**——v1-issue-1 骨架已完成（commit `2a83774`，219/219 测试通过）；**v1-issue-5/6/7 真实现仍 OPEN**——executor 接入 dispatcher + chapter01.md 真求值。**关键卡点：GH #50**。详见 [[../60-v1-roadmap]]
+2. **M2（v1 表达式子系统 ⏳ 部分）**——v1-issue-1 骨架已完成（commit `2a83774`，219/219 测试通过）；**v1-issue-5/6/7 真实现仍 OPEN**——executor 接入 dispatcher + chapter01.md 真求值。**关键卡点：GH #50**。详见 [[../40-issues/dashboard#v1-表达式子系统-prd-0002--adr-0003]]
 3. **M3（编辑器）**——`src/editor/` 起新上下文，节点图可视化
 4. **M4（跨平台）**——runtime 上下文拆 Web / 移动端
 
@@ -59,6 +59,6 @@
 - chapters/chapter01.md（与 ADR §附录 A 字节级一致）
 - 219 个 pytest 全过（v0 182 + v1-issue-1 骨架 37）
 - 22 个 v0 GH issue CLOSED + 8 个 v1 issue OPEN
-- 详见 [[../40-issues/dashboard]] + [[../60-v1-roadmap]] + `docs/adr/0002-v0-engine-implementation.md` + `docs/adr/0003-v1-expression-subsystem.md`
+- 详见 [[../40-issues/dashboard]] + `docs/adr/0002-v0-engine-implementation.md` + `docs/adr/0003-v1-expression-subsystem.md`
 
 → 相关：[[design-philosophy]] / [[../20-architecture/overview]] / `#43` `#44`
