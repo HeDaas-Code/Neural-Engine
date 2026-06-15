@@ -73,7 +73,8 @@ def test_blank_lines_skipped():
     content = "\n\nid: c1\n\n\nnode start\n\ntext x\n\nnode end\n"
     skel, _ = parse_block_skeleton(content, lineno=1)
     assert skel.meta_lines == _lines("id: c1\n")
-    assert skel.body_lines == _lines("text x\n")
+    # v0-issue-17 fix: body_lines 含 sentinel（node start / node end 保留）
+    assert skel.body_lines == _lines("node start\ntext x\nnode end\n")
 
 
 # 8. start_lineno = 围栏开行
@@ -95,4 +96,5 @@ def test_node_start_after_blank_or_comment_lines():
     content = "\n# 注释\nid: c1\n\nnode start\ntext x\nnode end\n"
     skel, _ = parse_block_skeleton(content, lineno=1)
     assert skel.meta_lines == _lines("id: c1\n")
-    assert skel.body_lines == _lines("text x\n")
+    # v0-issue-17 fix: body_lines 含 sentinel
+    assert skel.body_lines == _lines("node start\ntext x\nnode end\n")

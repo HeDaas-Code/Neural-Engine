@@ -26,7 +26,7 @@ class IdStart:
 
 @dataclass(frozen=True, slots=True)
 class IdEnd:
-    x: int
+    x: int | None
     route_chapter: str | None
     lineno: int = 0
 

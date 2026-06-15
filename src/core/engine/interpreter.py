@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from core.engine.ast_nodes import (
-    ParserError, BlockLocation, NextDecl,
+    ParserError, BlockLocation, NextDecl, IdMeta, IdEnd,
     Start, End, Text, In, Echo, NextId,
     If, Branch, CallExpression,
     DecoratorCall, DecoratorStop,
@@ -178,9 +178,10 @@ def parse_block_skeleton(
             continue
         meta_lines.append(line)
 
-    # 收集 body_lines（start 之后到 end 之前）
+    # v0-issue-17 fix: 保留 'node start' 和 'node end' 在 body_lines
+    # （让 parse_block_body 能检查首条 / 末条 sentinel）
     body_lines = []
-    for line in lines[start_idx + 1:end_idx]:
+    for line in lines[start_idx:end_idx + 1]:
         if _is_blank(line) or _is_full_line_comment(line):
             continue
         body_lines.append(line)
@@ -202,24 +203,14 @@ def parse_block_skeleton(
 
 
 @dataclass(frozen=True, slots=True)
-class IdSpec:
-    """元数据区一条 id 语句的解析结果。"""
-    kind: str  # "normal" | "start" | "end"
-    id: str | None
-    x: int | None
-    route_chapter: str | None
-    lineno: int
-
-
-@dataclass(frozen=True, slots=True)
 class BlockMeta:
     """块级元数据区解析结果：所有 id: 语句 + 起始行号。"""
-    ids: list[IdSpec]
+    ids: list[IdMeta | IdEnd]
     start_lineno: int
 
 
-def _parse_id_line(line: str, lineno: int) -> IdSpec:
-    """解析 'id:xxx' 单行。"""
+def _parse_id_line(line: str, lineno: int):
+    """解析 'id:xxx' 单行，返回 IdMeta 或 IdEnd。"""
     # 去掉行尾换行 / 前后空白
     s = line.strip()
     if not s.startswith("id:"):
@@ -230,22 +221,16 @@ def _parse_id_line(line: str, lineno: int) -> IdSpec:
     payload = s[3:].strip()  # id: 之后
 
     if payload == "start":
-        return IdSpec(
-            kind="start", id="start", x=None, route_chapter=None, lineno=lineno,
-        )
+        return IdMeta(id="start", lineno=lineno)
 
     if payload == "end":
-        return IdSpec(
-            kind="end", id=None, x=None, route_chapter=None, lineno=lineno,
-        )
+        return IdEnd(x=None, route_chapter=None, lineno=lineno)
 
     if payload.startswith("end"):
         # end / endX / endX:chapterYY
         rest = payload[3:]  # end 之后
         if rest == "":
-            return IdSpec(
-                kind="end", id=None, x=None, route_chapter=None, lineno=lineno,
-            )
+            return IdEnd(x=None, route_chapter=None, lineno=lineno)
         # rest 形如 "X" 或 "X:chapterYY"
         if ":" in rest:
             x_part, chapter_part = rest.split(":", 1)
@@ -259,14 +244,10 @@ def _parse_id_line(line: str, lineno: int) -> IdSpec:
                 loc=BlockLocation(lineno=lineno, col=1),
             )
         x = int(x_part)
-        return IdSpec(
-            kind="end", id=None, x=x, route_chapter=chapter_part, lineno=lineno,
-        )
+        return IdEnd(x=x, route_chapter=chapter_part, lineno=lineno)
 
     # 普通 id:xxx
-    return IdSpec(
-        kind="normal", id=payload, x=None, route_chapter=None, lineno=lineno,
-    )
+    return IdMeta(id=payload, lineno=lineno)
 
 
 def parse_block_meta(meta_lines: list[str], start_lineno: int) -> BlockMeta:
@@ -276,15 +257,17 @@ def parse_block_meta(meta_lines: list[str], start_lineno: int) -> BlockMeta:
     重复 id:xxx 抛 ParserError。
     """
     seen_ids: set[str] = set()
-    specs: list[IdSpec] = []
+    specs: list = []
     fence_lineno = start_lineno
     for i, line in enumerate(meta_lines):
+        # v0-issue-17 fix: 跳过 'next:' 行（v0-issue-9 parse_next_decls 处理）
+        if line.strip().startswith("next:") or "<-next:" in line:
+            continue
         # 围栏开行是 start_lineno；第一行 meta 在 start_lineno+1
         lineno = fence_lineno + 1 + i
         spec = _parse_id_line(line, lineno)
-        # 重复检测：normal kind 用 id；start/end 不参与（id 字段语义不同）
-        if spec.kind == "normal":
-            assert spec.id is not None
+        # 重复检测：IdMeta 用 id 字段；IdEnd 不参与
+        if isinstance(spec, IdMeta):
             if spec.id in seen_ids:
                 raise ParserError(
                     f"duplicate id {spec.id!r} at line {lineno}",
@@ -344,6 +327,12 @@ def parse_next_decls(
     decls: list[NextDecl] = []
     fence_lineno = start_lineno
     for i, line in enumerate(meta_lines):
+        # v0-issue-17 fix: 跳过 'id:' 行（v0-issue-8 parse_block_meta 处理）
+        if line.strip().startswith("id:") or "<-next:" in line and "id:" in line:
+            continue
+        # 简化：只处理以 next: 开头或包含 <-next: 的行
+        if not (line.strip().startswith("next:") or "<-next:" in line):
+            continue
         lineno = fence_lineno + 1 + i
         decls.append(_parse_next_line(line, lineno))
 
