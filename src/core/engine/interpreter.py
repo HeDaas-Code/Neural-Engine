@@ -18,6 +18,7 @@ from typing import Optional
 from core.engine.ast_nodes import (
     ParserError, BlockLocation, NextDecl,
     Start, End, Text, In, Echo, NextId,
+    If, Branch, CallExpression,
 )
 
 
@@ -433,14 +434,16 @@ def parse_block_body(
     start_lineno: int,
     *,
     block_meta: BlockMeta,
+    next_table: list | None = None,
 ) -> list:
     """解析块内执行区，返回 list[Node]。
 
     首条非空行必须是 'node start'，末条非空行必须是 'node end'。
     返回 list 包含 Start() 在首位、End() 在末位。
+
+    next_table: 用于 v0-issue-11 node if 解析；None 时 node if 抛 ParserError
     """
     fence_lineno = start_lineno
-    # 找首条 / 末条非空非注释行（v0-issue-7 已跳过空行注释，但 body_lines 可能空）
     if not body_lines:
         raise ParserError(
             f"empty body at line {fence_lineno + 1}",
@@ -461,12 +464,153 @@ def parse_block_body(
     for i, line in enumerate(body_lines):
         lineno = fence_lineno + 1 + i
         if line.strip() == "node start":
-            continue  # 后面会加 Start sentinel
+            continue
         if line.strip() == "node end":
-            continue  # 后面会加 End sentinel
+            continue
+        # v0-issue-11 路由: node if / node [...] 转交
+        s = line.strip()
+        if s.startswith("node if") or (s.startswith("node [") and "?" in s):
+            if next_table is None:
+                raise ParserError(
+                    f"'node if' requires next_table at line {lineno}",
+                    loc=BlockLocation(lineno=lineno, col=1),
+                )
+            nodes.append(parse_if_stmt(line, lineno, next_table=next_table))
+            continue
         node = _parse_body_line(line, lineno)
         if node is None:
-            continue  # 空行 / sentinel
+            continue
         nodes.append(node)
 
     return [Start(), *nodes, End()]
+
+
+# ─── 第六阶段：node if 解析 ──────────────────────────────────────────────────
+
+
+import re
+
+_BINARY_IF_RE = re.compile(r"^node if\s+(\w+)\s*\[(\w+),(\w+)\]\s*$")
+_MULTI_IF_RE = re.compile(r"^node if\s+(\w+)\s*\[([^\]]+)\]\s*$")
+_SHORTCUT_IF_RE = re.compile(r"^node\s*\[([^?]+)\?(\w+):(\w+)\]\s*$")
+
+
+def _build_next_lookup(next_table: list[NextDecl]) -> dict[str, NextDecl]:
+    """var_name -> NextDecl 查表。"""
+    return {d.var_name: d for d in next_table if d.var_name is not None}
+
+
+def _parse_branch_item(
+    item: str,
+    lineno: int,
+    next_lookup: dict[str, NextDecl],
+):
+    """解析多元分支项 'xxx' / 'echo xxx' / 'in ->xxx' / 'node xxx'。"""
+    s = item.strip()
+    # 去 node 前缀
+    if s.startswith("node "):
+        s = s[len("node "):].strip()
+    if s.startswith("node\t"):
+        s = s[len("node\t"):].strip()
+
+    # echo / in 关键字
+    if s.startswith("echo "):
+        var = s[len("echo "):].strip()
+        return CallExpression(kind="echo", var=var)
+    if s.startswith("in"):
+        after = s[len("in"):].strip()
+        if after.startswith("->"):
+            after = after[len("->"):].strip()
+        return CallExpression(kind="in", var=after)
+
+    # 裸变量名 → 查 next_table
+    if s in next_lookup:
+        return next_lookup[s]
+    raise ParserError(
+        f"unknown branch {s!r} at line {lineno}",
+        loc=BlockLocation(lineno=lineno, col=1),
+    )
+
+
+def parse_if_stmt(
+    line: str,
+    lineno: int,
+    *,
+    next_table: list[NextDecl],
+) -> If:
+    """解析 'node if' / 'node [...]' 各种形态。
+
+    三种形态：
+    - 二元：node if cond[a,b]
+    - 多元：node if var [1:a,2:b,3:echo p_pick]
+    - 简略二元：node [a?b:c]
+    """
+    s = line.strip()
+    next_lookup = _build_next_lookup(next_table)
+
+    def _lookup(name: str):
+        if name not in next_lookup:
+            raise ParserError(
+                f"unknown next var {name!r} at line {lineno}",
+                loc=BlockLocation(lineno=lineno, col=1),
+            )
+        return next_lookup[name]
+
+    # 简略二元：node [...]
+    m = _SHORTCUT_IF_RE.match(s)
+    if m and not s.startswith("node if"):
+        a_expr, b, c = m.group(1).strip(), m.group(2), m.group(3)
+        return If(
+            cond=("expr", a_expr),
+            branches=(
+                Branch(value=0, target=_lookup(b)),
+                Branch(value=1, target=_lookup(c)),
+            ),
+        )
+
+    # 二元
+    m = _BINARY_IF_RE.match(s)
+    if m:
+        cond_name, a, b = m.group(1), m.group(2), m.group(3)
+        return If(
+            cond=("var", cond_name),
+            branches=(
+                Branch(value=0, target=_lookup(a)),
+                Branch(value=1, target=_lookup(b)),
+            ),
+        )
+
+    # 多元
+    m = _MULTI_IF_RE.match(s)
+    if m:
+        var_name, body = m.group(1), m.group(2)
+        # 拆 "1:a,2:b,3:echo p_pick" → [(1, "a"), (2, "b"), (3, "echo p_pick")]
+        items = [it.strip() for it in body.split(",") if it.strip()]
+        branches_list = []
+        for it in items:
+            if ":" not in it:
+                # 整项可能是 "node xxx"（无 数字: 前缀）——直接当裸分支项
+                target = _parse_branch_item(it, lineno, next_lookup)
+                # 多元必须配 value——给个临时 val=0（实际 v0 阶段应报"无 value"）
+                # 这种情况是测试 5 的 [node a,node b]——按 ADR 应是二元形式
+                # 二元已先于多元匹配，所以到这里不应有——保护性抛错
+                raise ParserError(
+                    f"multi-if branch item missing 'N:' prefix: {it!r} at line {lineno}",
+                    loc=BlockLocation(lineno=lineno, col=1),
+                )
+            val_str, item = it.split(":", 1)
+            try:
+                val = int(val_str.strip())
+            except ValueError:
+                raise ParserError(
+                    f"branch value must be integer, got {val_str!r} at line {lineno}",
+                    loc=BlockLocation(lineno=lineno, col=1),
+                )
+            target = _parse_branch_item(item, lineno, next_lookup)
+            branches_list.append(Branch(value=val, target=target))
+        return If(cond=("var", var_name), branches=tuple(branches_list))
+
+    raise ParserError(
+        f"malformed 'node if' at line {lineno}: {s!r}",
+        loc=BlockLocation(lineno=lineno, col=1),
+    )

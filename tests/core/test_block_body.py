@@ -9,9 +9,10 @@ import pytest
 REPO_ROOT = "/home/hedaas/桌面/Neural Engine"
 sys.path.insert(0, f"{REPO_ROOT}/src")
 
+from core.engine.ast_nodes import NextDecl  # noqa: E402
 from core.engine.interpreter import parse_block_body, BlockMeta  # noqa: E402
 from core.engine.ast_nodes import (  # noqa: E402
-    Start, End, Text, In, Echo, NextId, ParserError,
+    Start, End, Text, In, Echo, NextId, If, ParserError,
 )
 
 
@@ -106,3 +107,29 @@ def test_unrecognized_prefix_raises():
     lines = ["node start\n", "node echo\n", "node end\n"]
     with pytest.raises(ParserError):
         parse_block_body(lines, start_lineno=10, block_meta=_empty_meta())
+
+
+# 10. v0-issue-11 集成: node if 二元
+def test_block_body_routes_node_if_binary():
+    lines = ["node start\n", "node if cond[a,b]\n", "node end\n"]
+    nt = [
+        NextDecl(var_name="a", target_id="ca", lineno=1),
+        NextDecl(var_name="b", target_id="cb", lineno=2),
+    ]
+    nodes = parse_block_body(lines, start_lineno=10, block_meta=_empty_meta(), next_table=nt)
+    if_node = nodes[1]
+    assert isinstance(if_node, If)
+    assert if_node.cond == ("var", "cond")
+
+
+# 11. v0-issue-11 集成: 简略二元
+def test_block_body_routes_shortcut_if():
+    lines = ["node start\n", "node [some?b:c]\n", "node end\n"]
+    nt = [
+        NextDecl(var_name="b", target_id="cb", lineno=1),
+        NextDecl(var_name="c", target_id="cc", lineno=2),
+    ]
+    nodes = parse_block_body(lines, start_lineno=10, block_meta=_empty_meta(), next_table=nt)
+    if_node = nodes[1]
+    assert isinstance(if_node, If)
+    assert if_node.cond[0] == "expr"
