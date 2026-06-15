@@ -191,3 +191,100 @@ def parse_block_skeleton(
         ),
         rest,
     )
+
+
+# ─── 第三阶段：元数据区解析 ──────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class IdSpec:
+    """元数据区一条 id 语句的解析结果。"""
+    kind: str  # "normal" | "start" | "end"
+    id: str | None
+    x: int | None
+    route_chapter: str | None
+    lineno: int
+
+
+@dataclass(frozen=True, slots=True)
+class BlockMeta:
+    """块级元数据区解析结果：所有 id: 语句 + 起始行号。"""
+    ids: list[IdSpec]
+    start_lineno: int
+
+
+def _parse_id_line(line: str, lineno: int) -> IdSpec:
+    """解析 'id:xxx' 单行。"""
+    # 去掉行尾换行 / 前后空白
+    s = line.strip()
+    if not s.startswith("id:"):
+        raise ParserError(
+            f"unexpected meta line {s!r} at line {lineno}",
+            loc=BlockLocation(lineno=lineno, col=1),
+        )
+    payload = s[3:].strip()  # id: 之后
+
+    if payload == "start":
+        return IdSpec(
+            kind="start", id="start", x=None, route_chapter=None, lineno=lineno,
+        )
+
+    if payload == "end":
+        return IdSpec(
+            kind="end", id=None, x=None, route_chapter=None, lineno=lineno,
+        )
+
+    if payload.startswith("end"):
+        # end / endX / endX:chapterYY
+        rest = payload[3:]  # end 之后
+        if rest == "":
+            return IdSpec(
+                kind="end", id=None, x=None, route_chapter=None, lineno=lineno,
+            )
+        # rest 形如 "X" 或 "X:chapterYY"
+        if ":" in rest:
+            x_part, chapter_part = rest.split(":", 1)
+        else:
+            x_part, chapter_part = rest, None
+
+        if not x_part.isdigit():
+            # 浮点/字母/负数 → isdigit 都不通过；负数 '-' 不在 isdigit
+            raise ParserError(
+                f"end 后必须是自然数，得到 {x_part!r} at line {lineno}",
+                loc=BlockLocation(lineno=lineno, col=1),
+            )
+        x = int(x_part)
+        return IdSpec(
+            kind="end", id=None, x=x, route_chapter=chapter_part, lineno=lineno,
+        )
+
+    # 普通 id:xxx
+    return IdSpec(
+        kind="normal", id=payload, x=None, route_chapter=None, lineno=lineno,
+    )
+
+
+def parse_block_meta(meta_lines: list[str], start_lineno: int) -> BlockMeta:
+    """解析块级元数据区。
+
+    每行 lineno = start_lineno + 1 (跳过围栏) + 行 index。
+    重复 id:xxx 抛 ParserError。
+    """
+    seen_ids: set[str] = set()
+    specs: list[IdSpec] = []
+    fence_lineno = start_lineno
+    for i, line in enumerate(meta_lines):
+        # 围栏开行是 start_lineno；第一行 meta 在 start_lineno+1
+        lineno = fence_lineno + 1 + i
+        spec = _parse_id_line(line, lineno)
+        # 重复检测：normal kind 用 id；start/end 不参与（id 字段语义不同）
+        if spec.kind == "normal":
+            assert spec.id is not None
+            if spec.id in seen_ids:
+                raise ParserError(
+                    f"duplicate id {spec.id!r} at line {lineno}",
+                    loc=BlockLocation(lineno=lineno, col=1),
+                )
+            seen_ids.add(spec.id)
+        specs.append(spec)
+    return BlockMeta(ids=specs, start_lineno=fence_lineno)
