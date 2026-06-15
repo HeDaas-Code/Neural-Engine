@@ -13,6 +13,10 @@
   4. 角色：本地分析载体 **+** 项目 Wiki 双重身份
 - **触发事件 2（2026-06-15）**：用户报"cursor 编码完成"，要求"初始化 code 图，结合 MCP / issue / 代码原文更新 wiki"
 - **结果 2**：cursor 在 `df8a49a` 之后连发 19 个 feat commit，把 v0-issue-1 ~ v0-issue-19 全部实现（HEAD = `1a76382`，152/152 测试通过）。codegraph MCP 不可用（stdio 模式未对外暴露），但用直接读代码的方式做了完整偏差审计（3 偏差 + 7 确认），写进 `[[../30-protocol/implementation-deviations]]`
+- **触发事件 3（2026-06-15）**：owner 报"两个需要 HITL 的 iss 做了"，代执行 v0-issue-20/21 + 关 22 个 issue
+- **结果 3**：commit `125f237` 含 4 个新文件（tests/test_invariants.py 11 用例 + tests/test_mvp_table.py 19 用例 + docs/adr/0002-v0-engine-implementation.md 9.4 KB + docs/audit/v0-invariant-audit.md 8.4 KB）+ 22/22 issues closed + wiki 同步
+- **触发事件 4（2026-06-15）**：owner 报"v1 相关已由 cursor 完成，更新 wiki"
+- **结果 4**：cursor 落地 v1-issue-1 表达式子系统骨架（commit `2a83774`）：6 个 .py（`src/core/engine/expr/{__init__,errors,builtin_funcs,translator,dispatcher,custom}.py`）+ 3 个测试文件 37 用例 + 219/219 测试通过。但 **v1-issue-2 ~ 7 真实现全部 OPEN**——executor 仍 v0 打桩。新 wiki 页 `[[../60-v1-roadmap]]` + 更新 dashboard + glossary-anchors 加 v1 术语。
 
 ## 工作流执行（按 8 步）
 

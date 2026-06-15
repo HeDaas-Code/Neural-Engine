@@ -154,12 +154,13 @@
 - `chapters/chapter01.md` —— ADR §附录 A 字节级副本
 - CodeGraph 索引 —— `codegraph init` 在 `.codegraph/codegraph.db`（1.4 MB SQLite）
 - CodeGraph 调用关系 —— `codegraph_callers` / `codegraph_explore` MCP 查询
-- ADR-0001 / ADR-0002（待写）—— [[raw-docs/ADR-0001-v0-baseline-script-spec]]
-- 22 个 GH issue 完成评论 —— `gh issue view N --comments`
-- 19 个 feat commit —— `git log --oneline`（HEAD = `1a76382`）
-- pytest 结果 —— `python -m pytest tests/ -q`（152 passed）
-- [[40-issues/dashboard]] — 22 issue 总览
-- [[dependency-graph]] — 实施路径图
+- ADR-0001 / ADR-0002 / ADR-0003 —— [[raw-docs/ADR-0001-v0-baseline-script-spec]] 等
+- 22 + 8 = 30 个 GH issue —— `gh issue list --repo HeDaas-Code/Neural-Engine`
+- 19 个 v0 feat commit + 1 个 v1 骨架 commit —— `git log --oneline`（v0 HEAD = `c1844d9`，v1 HEAD = `50747ec`）
+- pytest 结果 —— `python -m pytest tests/ -q`（**219 passed**）
+- [[40-issues/dashboard]] — 22 v0 + 8 v1 issue 总览
+- [[60-v1-roadmap]] — v1 路线图（v1-issue-1 骨架 + 5 个 issue OPEN）
+- [[dependency-graph]] — v0 实施路径图
 
 ## 路径 B GUI 实测
 
@@ -237,9 +238,10 @@
 
 - `src/core/engine/` 7 个 .py —— `find src -name "*.py"`（实测全文）
 - `chapters/chapter01.md` —— ADR §附录 A 字节级副本
-- ADR-0001 / ADR-0002（待写）—— [[raw-docs/ADR-0001-v0-baseline-script-spec]]
-- 22 个 GH issue 完成评论 —— `gh issue view N --comments`
-- 19 个 feat commit —— `git log --oneline`（HEAD = `1a76382`）
-- pytest 结果 —— `python -m pytest tests/ -q`（152 passed）
-- [[40-issues/dashboard]] — 22 issue 总览
-- [[dependency-graph]] — 实施路径图
+- ADR-0001 / ADR-0002 / ADR-0003 —— [[raw-docs/ADR-0001-v0-baseline-script-spec]] 等
+- 22 + 8 = 30 个 GH issue —— `gh issue list --repo HeDaas-Code/Neural-Engine`
+- 19 个 v0 feat commit + 1 个 v1 骨架 commit —— `git log --oneline`（v0 HEAD = `c1844d9`，v1 HEAD = `50747ec`）
+- pytest 结果 —— `python -m pytest tests/ -q`（**219 passed**）
+- [[40-issues/dashboard]] — 22 v0 + 8 v1 issue 总览
+- [[60-v1-roadmap]] — v1 路线图（v1-issue-1 骨架 + 5 个 issue OPEN）
+- [[dependency-graph]] — v0 实施路径图

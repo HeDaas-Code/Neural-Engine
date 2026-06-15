@@ -77,6 +77,23 @@
 | **shallow** | [[raw-docs/CONTEXT-core.md]] | = 数据结构层 |
 | **快照** / **snapshot** | [[raw-docs/CONTEXT-core.md]] | v0 不实现 |
 
+### v1 表达式子系统族（ADR-0003 新增）
+
+| 自创词 | 出处（原文） | 备注 |
+| --- | --- | --- |
+| **表达式子系统** / **expr subpackage** | `docs/adr/0003-v1-expression-subsystem.md` §2 | v1 新增子包 `src/core/engine/expr/` |
+| **ExprTranslator** | ADR-0003 §3.2 | DSL 文本 → Python 表达式字符串翻译器 |
+| **ExprDispatcher** | ADR-0003 §3.1 | translator → simpleeval → fallback 三层调度 |
+| **CustomExecutor** | ADR-0003 §3.3 | simpleeval 兜底 + 业务侧扩展钩子 |
+| **ExprError** | ADR-0003 §3.5 | 表达式求值失败（RuntimeError 子类）|
+| **DSLSyntaxError** | ADR-0003 §3.5 | DSL 翻译失败（ParserError 子类）|
+| **UnsupportedNodeError** | ADR-0003 §3.5 | simpleeval 不支持 AST 节点（ExprError 子类）|
+| **BUILTIN_FUNCS** | ADR-0003 §3.4 | 9 个函数白名单（len/int/str/float/min/max/abs/round/bool）|
+| **三层调度** | ADR-0003 §2 决策 3 | translator → simpleeval → CustomExecutor fallback |
+| **bool_expr kind** | ADR-0003 §2 决策 4 | `If.cond = ("bool_expr", expr_str)` 形态 |
+| **range kind** | ADR-0003 §2 决策 4 | `If.cond = ("range", (lo, hi))` 形态（v2+）|
+| **keyword_table** | ADR-0003 §3.2 | DSL 自定义中缀命名映射 |
+
 ### 强约束 / 软约束族
 
 | 自创词 | 出处（原文） | 备注 |

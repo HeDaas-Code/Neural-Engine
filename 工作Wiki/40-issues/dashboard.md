@@ -61,21 +61,41 @@
 ### 阶段 5（端到端）✅ done
 - `#42` chapter01 fixture + 集成测试（`1a76382`）
 
-### 阶段 6（HITL 完工）⏳ owner 待做
-- `#43` §11 不变量自动化守护（HITL）—— 跑 `grep -r '"NEXT"' src/` 等 3 条 + 写 `docs/audit/v0-invariant-audit.md`
-- `#44` ADR-0002 完工记录（HITL）—— 写 4 条偏差登记（[[implementation-deviations]]）
+### 阶段 7（v0 完工 HITL）✅ done
+- #43 §11 不变量自动化守护（commit `125f237`，owner 接受）
+- #44 ADR-0002 完工记录（commit `125f237`，owner 接受）
 
-## 完成度（2026-06-15 v0 完工实测）
+## v1 表达式子系统（PRD-0002 / ADR-0003）
+
+> **v1-issue-1 骨架已完成**（commit `2a83774`，219/219 测试通过）。**v1-issue-2 ~ 7 真实现全部 OPEN**——executor 仍 v0 打桩，chapter01.md 还没真求值。详见 [[../60-v1-roadmap]]。
+
+| GH # | v1-issue | 标题 | 标签 | 状态 | commit |
+| --- | --- | --- | --- | --- | --- |
+| 53 | 父 PRD | v1 表达式子系统（node if 真求值） | ready-for-human | ❌ **OPEN** | — |
+| 52 | v1-issue-1 | 表达式子系统骨架 (ADR-0003) | ready-for-agent | ✅ done（实测）| `2a83774` |
+| 46 | v1-issue-2 | ExprTranslator 拓展（Chinese 关键字 + keyword_table）| ready-for-agent | ⚠️ OPEN（被骨架超额完成）| `2a83774` |
+| 47 | v1-issue-3 | CustomExecutor 完整实现 | ready-for-agent | ⚠️ OPEN（被骨架超额完成）| `2a83774` |
+| 48 | v1-issue-4 | ExprDispatcher 完整三层调度 | ready-for-agent | ⚠️ OPEN（被骨架超额完成）| `2a83774` |
+| 49 | v1-issue-5 | If.cond 扩 bool_expr + range kind | ready-for-agent | ❌ **OPEN（未做）** | — |
+| 50 | v1-issue-6 | executor._execute_if 接入 ExprDispatcher | ready-for-agent | ❌ **OPEN（未做，v1 卡点）** | — |
+| 51 | v1-issue-7 | 端到端 chapter01.md 真求值 + 测试全绿 | ready-for-agent | ❌ **OPEN（未做）** | — |
+| 54 | cursor 自评 | feat(expr): v1-issue-1 ... | ready-for-agent | ❌ OPEN（cursor 自评"实施完成"但实际只骨架） | — |
+
+**v1 关键卡点**：**#50（dispatcher 接入 executor）**——是 v1 闭环的最后一道。其他 4 个 issue（#46-#49）骨架 commit 已超额实现。
+
+## 完成度（2026-06-15 v1 骨架 + v0 闭环实测）
 
 ```
-[====================] 22/22 CLOSED（v0 全部完成）
+[==========] 22/22 v0 CLOSED ✅ + 8/9 v1 OPEN（仅骨架完成）
 ```
 
-**代码完成度**：**100%**（v0-issue-1 ~ v0-issue-19 全部落地，commit `125f237`）
+**代码完成度**：
+- v0：100%（commit `125f237`，v0-issue-1 ~ 19 全部落地 + 2 HITL 验收完成）
+- v1：**12.5%**（1/8 完成 = v1-issue-1 骨架；剩余 v1-issue-5/6/7 真实现未做）
 
-**测试完成度**：**182/182 PASSED**（152 原有 + 30 新增 v0-issue-20 守护）
+**测试完成度**：**219/219 PASSED**（152 v0 原有 + 30 v0-issue-20 守护 + 37 v1-issue-1 骨架）
 
-**Issue 完成度**：**22/22 CLOSED**（commit `125f237`，包含 #43 #44 HITL）
+**Issue 完成度**：**22/30 OPEN**（22 v0 已关 + 8 v1 全 OPEN）
 
 **v0 完工条件**：
 - ✅ §11 不变量 10 条全部有自动化 pytest 用例（`tests/test_invariants.py`）

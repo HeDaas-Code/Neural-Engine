@@ -26,8 +26,11 @@
 - [[30-protocol/implementation-deviations]] — **实测代码 vs spec 偏差**（3 偏差 + 7 确认）
 
 ### 任务层（40-issues）
-- [[40-issues/dashboard]] — 22 个 issue 总览 + 完成度
+- [[40-issues/dashboard]] — 22 v0 + 8 v1 issue 总览 + 完成度
 - [[40-issues/dependency-graph]] — issue 依赖关系图
+
+### 里程碑层（60-v1-roadmap）
+- [[60-v1-roadmap]] — **v1 表达式子系统路线图**（v1-issue-1 骨架 ✅ + 5 个 issue OPEN）
 
 ### 验证层（50-fixtures）
 - [[50-fixtures/chapter01]] — ADR 附录 A 剧本分析 + 期望事件流
