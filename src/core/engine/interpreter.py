@@ -15,7 +15,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-from core.engine.ast_nodes import ParserError, BlockLocation, NextDecl
+from core.engine.ast_nodes import (
+    ParserError, BlockLocation, NextDecl,
+    Start, End, Text, In, Echo, NextId,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -364,3 +367,106 @@ def parse_next_decls(
         seen.add(d.var_name)
 
     return decls
+
+
+# ─── 第五阶段：块内执行区解析 ──────────────────────────────────────────────────
+
+
+def _parse_body_line(line: str, lineno: int):
+    """解析块内执行区一行。返回 AST 节点 或 抛 ParserError。
+
+    - 'node in ->var' / 'node in->var' → In(var)
+    - 'node echo var' → Echo(var)
+    - 'node next_id' → NextId(target_id)
+    - '@xxx' → 保留为 Text（v0-issue-12 二次处理）
+    - 普通文本 → Text(content=line)
+    - 其他 → ParserError
+    """
+    s = line.strip()
+    if s.startswith("node "):
+        rest = s[len("node "):].strip()
+        if rest == "start":
+            return None  # sentinel: 调用方不生成节点
+        if rest == "end":
+            return None  # sentinel
+        # node in / node echo / node xxx
+        if rest.startswith("in"):
+            # "in ->var" / "in->var"
+            after = rest[len("in"):].strip()
+            # 去 -> 前缀
+            if after.startswith("->"):
+                after = after[len("->"):].strip()
+            if not after:
+                raise ParserError(
+                    f"empty var after 'node in' at line {lineno}",
+                    loc=BlockLocation(lineno=lineno, col=1),
+                )
+            return In(var=after)
+        if rest.startswith("echo"):
+            var = rest[len("echo"):].strip()
+            if not var:
+                raise ParserError(
+                    f"empty var after 'node echo' at line {lineno}",
+                    loc=BlockLocation(lineno=lineno, col=1),
+                )
+            return Echo(var=var)
+        # node xxx (xxx = next_id 形)
+        # 本 issue 把任何 node xxx 视为 NextId，校验留给 v0-issue-16
+        if rest:
+            return NextId(target_id=rest)
+        raise ParserError(
+            f"empty node command at line {lineno}",
+            loc=BlockLocation(lineno=lineno, col=1),
+        )
+    if s.startswith("@"):
+        # 修饰器行：保留为 Text，v0-issue-12 二次处理
+        return Text(content=line)
+    if s == "":
+        # 空行（v0-issue-7 应该已跳过，但防御性）
+        return None
+    # 普通文本行
+    return Text(content=line)
+
+
+def parse_block_body(
+    body_lines: list[str],
+    start_lineno: int,
+    *,
+    block_meta: BlockMeta,
+) -> list:
+    """解析块内执行区，返回 list[Node]。
+
+    首条非空行必须是 'node start'，末条非空行必须是 'node end'。
+    返回 list 包含 Start() 在首位、End() 在末位。
+    """
+    fence_lineno = start_lineno
+    # 找首条 / 末条非空非注释行（v0-issue-7 已跳过空行注释，但 body_lines 可能空）
+    if not body_lines:
+        raise ParserError(
+            f"empty body at line {fence_lineno + 1}",
+            loc=BlockLocation(lineno=fence_lineno + 1, col=1),
+        )
+    if body_lines[0].strip() != "node start":
+        raise ParserError(
+            f"missing 'node start' at line {fence_lineno + 1}",
+            loc=BlockLocation(lineno=fence_lineno + 1, col=1),
+        )
+    if body_lines[-1].strip() != "node end":
+        raise ParserError(
+            f"missing 'node end' at line {fence_lineno + 1}",
+            loc=BlockLocation(lineno=fence_lineno + 1, col=1),
+        )
+
+    nodes: list = []
+    for i, line in enumerate(body_lines):
+        lineno = fence_lineno + 1 + i
+        if line.strip() == "node start":
+            continue  # 后面会加 Start sentinel
+        if line.strip() == "node end":
+            continue  # 后面会加 End sentinel
+        node = _parse_body_line(line, lineno)
+        if node is None:
+            continue  # 空行 / sentinel
+        nodes.append(node)
+
+    return [Start(), *nodes, End()]

@@ -1,0 +1,108 @@
+"""v0-issue-10 块内执行区解析测试。
+
+按 issue #32 acceptance criteria 验证 parse_block_body。
+"""
+import sys
+
+import pytest
+
+REPO_ROOT = "/home/hedaas/桌面/Neural Engine"
+sys.path.insert(0, f"{REPO_ROOT}/src")
+
+from core.engine.interpreter import parse_block_body, BlockMeta  # noqa: E402
+from core.engine.ast_nodes import (  # noqa: E402
+    Start, End, Text, In, Echo, NextId, ParserError,
+)
+
+
+def _empty_meta() -> BlockMeta:
+    return BlockMeta(ids=[], start_lineno=10)
+
+
+# 1. 全语句类型
+def test_full_block_with_all_statement_types():
+    lines = [
+        "node start\n",
+        "雨夜。\n",
+        "node in ->p_mood\n",
+        "node echo p_mood\n",
+        "node next_id\n",
+        "node end\n",
+    ]
+    nodes = parse_block_body(lines, start_lineno=10, block_meta=_empty_meta())
+    # Start + Text + In + Echo + NextId + End
+    assert len(nodes) == 6
+    assert isinstance(nodes[0], Start)
+    assert isinstance(nodes[-1], End)
+    assert isinstance(nodes[1], Text) and nodes[1].content == "雨夜。\n"
+    assert isinstance(nodes[2], In) and nodes[2].var == "p_mood"
+    assert isinstance(nodes[3], Echo) and nodes[3].var == "p_mood"
+    assert isinstance(nodes[4], NextId) and nodes[4].target_id == "next_id"
+
+
+# 2. node in 两种格式
+def test_node_in_with_arrow_space_and_without():
+    # 带空格
+    lines1 = ["node start\n", "node in ->p_mood\n", "node end\n"]
+    nodes1 = parse_block_body(lines1, start_lineno=10, block_meta=_empty_meta())
+    assert isinstance(nodes1[1], In) and nodes1[1].var == "p_mood"
+
+    # 不带空格
+    lines2 = ["node start\n", "node in->p_mood\n", "node end\n"]
+    nodes2 = parse_block_body(lines2, start_lineno=10, block_meta=_empty_meta())
+    assert isinstance(nodes2[1], In) and nodes2[1].var == "p_mood"
+
+
+# 3. node echo
+def test_node_echo():
+    lines = ["node start\n", "node echo p_pick\n", "node end\n"]
+    nodes = parse_block_body(lines, start_lineno=10, block_meta=_empty_meta())
+    assert isinstance(nodes[1], Echo) and nodes[1].var == "p_pick"
+
+
+# 4. node next_id
+def test_node_next_id():
+    lines = ["node start\n", "node c1\n", "node end\n"]
+    nodes = parse_block_body(lines, start_lineno=10, block_meta=_empty_meta())
+    assert isinstance(nodes[1], NextId) and nodes[1].target_id == "c1"
+
+
+# 5. 文本行
+def test_plain_text_line_becomes_text_node():
+    lines = ["node start\n", "雨夜。\n", "敲门声。\n", "node end\n"]
+    nodes = parse_block_body(lines, start_lineno=10, block_meta=_empty_meta())
+    assert isinstance(nodes[1], Text) and nodes[1].content == "雨夜。\n"
+    assert isinstance(nodes[2], Text) and nodes[2].content == "敲门声。\n"
+
+
+# 6. @xxx 保留
+def test_decorator_line_preserved_for_issue_12():
+    # 本 issue 看到 @ 行→ 原样保留（不抛错，不解析）
+    # 解析器应该: 当遇到 @ 行→ 包成 Text 节点（保留原样）—— 给 v0-issue-12 二次处理
+    lines = ["node start\n", "@style bgm:rain\n", "node end\n"]
+    nodes = parse_block_body(lines, start_lineno=10, block_meta=_empty_meta())
+    # @ 行原样保留为 Text（v0-issue-12 会二次处理为 DecoratorCall/DecoratorStop）
+    assert isinstance(nodes[1], Text)
+    assert "@style bgm:rain" in nodes[1].content
+
+
+# 7. 缺 node start
+def test_missing_node_start_raises():
+    lines = ["雨夜。\n", "node end\n"]
+    with pytest.raises(ParserError):
+        parse_block_body(lines, start_lineno=10, block_meta=_empty_meta())
+
+
+# 8. 缺 node end
+def test_missing_node_end_raises():
+    lines = ["node start\n", "雨夜。\n"]
+    with pytest.raises(ParserError):
+        parse_block_body(lines, start_lineno=10, block_meta=_empty_meta())
+
+
+# 9. 'node echo ' 无变量名
+def test_unrecognized_prefix_raises():
+    # 'node echo' 缺变量 → ParserError（v0-issue-10 行为）
+    lines = ["node start\n", "node echo\n", "node end\n"]
+    with pytest.raises(ParserError):
+        parse_block_body(lines, start_lineno=10, block_meta=_empty_meta())
