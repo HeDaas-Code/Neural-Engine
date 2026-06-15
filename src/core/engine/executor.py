@@ -71,7 +71,7 @@ class Executor:
     入口 id:start 块，按 Start→...→End 顺序调度节点。
     """
 
-    def __init__(self, story: Story, sink: EventSink, *, entry_id: str = "start"):
+    def __init__(self, story: Story, sink: EventSink, *, entry_id: str = "start", dispatcher=None):
         self.story = story
         self.sink = sink
         self.state = GameState()
@@ -80,6 +80,10 @@ class Executor:
         self._deco_state: dict = {}  # v0-issue-15 修饰器状态 {name: {key: val}}
         # 跨块 ID 校验：所有 next_table target_id + NextId 目标 + if 分支目标 必须在 story
         self._validate_target_ids()
+        # v1-issue-6: 表达式调度器 (None 时 lazy 构造, 保持 v0 executor 用法不变)
+        # 用 __bool__ 守卫的 None, 实际访问时 lazy import
+        self.dispatcher = dispatcher  # type: ignore[assignment]
+        self._dispatcher_resolved = dispatcher is not None
 
     def _validate_target_ids(self) -> None:
         """构造时一次性校验所有 target_id 在 story 内能找到。"""
@@ -224,12 +228,76 @@ class Executor:
                 self._deco_state[deco.name].pop(deco.key, None)
             self.sink.put_evt(DecoratorEvt(name=deco.name, args=[deco.key]))
 
+    def _resolve_dispatcher(self):
+        """lazy 构造 ExprDispatcher——避免 executor 构造时强制依赖 expr 子包.
+
+        v0 测试不构造 dispatcher 也跑得通; v1 bool_expr 走 dispatcher 时才 import.
+        """
+        if not self._dispatcher_resolved:
+            from core.engine.expr.dispatcher import ExprDispatcher
+            self.dispatcher = ExprDispatcher(self.state)
+            self._dispatcher_resolved = True
+        return self.dispatcher
+
     def _execute_if(self, if_node: If) -> None:
-        """v0-issue-16: node if 打桩——永远选第一分支。"""
-        chosen = if_node.branches[0]
+        """v1-issue-6: node if 真求值——按 cond kind 分流。
+
+        cond 形态:
+        - ("var", name): v0 值匹配 (state.vars[name] == branch.value), 不进 dispatcher
+        - ("expr", short): v0 简略二元, 进 dispatcher.eval_bool
+        - ("bool_expr", expr): v1 新增, 进 dispatcher.eval_bool
+        - ("range", (lo, hi)): v1 占 kind, 走 branches[0] (v2 真实实现)
+
+        选完 branch 后, 同 v0 解析分支目标 (NextDecl / CallExpression)。
+        """
+        kind, payload = if_node.cond
+        chosen = None
+
+        if kind == "var":
+            # v0 兼容: 值匹配. 变量不存在时走 branches[0] (v0 既有行为)
+            current = self.state.vars.get(payload)
+            for branch in if_node.branches:
+                if branch.value == current:
+                    chosen = branch
+                    break
+            if chosen is None:
+                chosen = if_node.branches[0]
+        elif kind in ("expr", "bool_expr"):
+            # dispatcher 真求值 (lazy 构造)
+            dispatcher = self._resolve_dispatcher()
+            try:
+                truthy = dispatcher.eval_bool(payload)
+            except Exception as e:  # noqa: BLE001
+                # 求值失败, 走 branches[0] + 打日志 (保守降级)
+                self.sink.put_evt(LogEvt(
+                    level="warning",
+                    message=f"node if expr eval failed: {e!r}, falling back to first branch",
+                ))
+                chosen = if_node.branches[0]
+            else:
+                # 找第一个 value 与 truthy 一致的 branch (True→value=1, False→value=0)
+                target_value = 1 if truthy else 0
+                for branch in if_node.branches:
+                    if branch.value == target_value:
+                        chosen = branch
+                        break
+                if chosen is None:
+                    # 没有匹配值的 branch——保守选 branches[0]
+                    chosen = if_node.branches[0]
+        elif kind == "range":
+            # v1 占 kind: v2 实现范围匹配; v1 走 branches[0]
+            chosen = if_node.branches[0]
+        else:
+            # 未知 kind——保守选 branches[0]
+            self.sink.put_evt(LogEvt(
+                level="warning",
+                message=f"node if unknown cond kind {kind!r}, falling back to first branch",
+            ))
+            chosen = if_node.branches[0]
+
         self.sink.put_evt(LogEvt(
             level="info",
-            message=f"node if stubbed: chose branch {chosen.value}",
+            message=f"node if: chose branch {chosen.value}",
         ))
         # 解析分支目标
         target = chosen.target
