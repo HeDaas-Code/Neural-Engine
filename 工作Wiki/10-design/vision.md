@@ -46,15 +46,17 @@
 
 ## 关键里程碑
 
-1. **M1（v0 完工）**——22 个 issue 全部 closed + `chapter01.md` 端到端跑通 + ADR-0002 完工记录
+1. **M1（v0 代码完成 ✅）**——v0-issue-1 ~ v0-issue-19 全部代码已落地（commit `1a76382`），152/152 测试通过。**剩 HITL**：owner 跑 GH #43（不变量守护 3 条 grep + 写 `docs/audit/v0-invariant-audit.md`）+ GH #44（写 `docs/adr/0002-v0-engine-implementation.md` 登记 4 条偏差 + `gh issue close 22..44`）
 2. **M2（真实运行时）**——`@style` 真接音视频、`node if` 真做条件、章节路由真加载下一章
 3. **M3（编辑器）**——`src/editor/` 起新上下文，节点图可视化
 4. **M4（跨平台）**——runtime 上下文拆 Web / 移动端
 
-## 仓库状态（2026-06-15 重置后）
+## 仓库状态（2026-06-15 实测：v0 已落地）
 
-仓库回到 commit `499fcf1`（ADR-0001 + PRD-0001 + CLAUDE.md + CONTEXT-MAP.md），**所有 v0 实现代码被还原**。当前分支 `cursor/setup-issues-v0-vertical-slices`（HEAD `df8a49a`）只新增了"发布 issue 草稿"的 commit。
-
-**重启策略**：从 v0-issue-1（仓库骨架）开始，按依赖顺序重做。
+- HEAD `1a76382 feat: 落地 v0-issue-19 chapter01 fixture + 端到端集成测试`
+- src/core/engine/ 7 个 .py + chapters/chapter01.md（与 ADR §附录 A 字节级一致）
+- 152 个 pytest 全过（v0-issue-1 ~ v0-issue-19 全部 done）
+- 22 个 GH issue 全 OPEN 但 cursor 都发了完成评论
+- 详见 [[../40-issues/dashboard]] + [[../30-protocol/implementation-deviations]]
 
 → 相关：[[design-philosophy]] / [[../20-architecture/overview]] / `#43` `#44`

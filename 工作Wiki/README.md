@@ -22,7 +22,8 @@
 
 ### 协议层（30-protocol）
 - [[30-protocol/messages]] — Cmd/Evt 全清单 + JSON schema
-- [[30-protocol/bus]] — EngineBus 封装（v0-issue-5 待实现）
+- [[30-protocol/bus]] — EngineBus 封装（v0-issue-5 已实现）
+- [[30-protocol/implementation-deviations]] — **实测代码 vs spec 偏差**（3 偏差 + 7 确认）
 
 ### 任务层（40-issues）
 - [[40-issues/dashboard]] — 22 个 issue 总览 + 完成度
@@ -75,5 +76,6 @@
 ## 提交状态
 
 - ✅ 本地仓库 `工作Wiki/` 目录
-- ⏳ 待 `git add` + `git commit` + `git push origin main`
-- ⏳ 待推 GitHub Wiki 引擎（`wiki` 分支）
+- ✅ 双推：main 分支（`origin/cursor/setup-issues-v0-vertical-slices`）+ wiki 分支（`origin/wiki`）
+- ✅ **实测 2026-06-15**：v0 代码 100% 完成（152/152 测试通过），详见 [[30-protocol/implementation-deviations]]
+- ⏳ owner 待做：GH #43 #44 HITL（不变量守护 + ADR-0002 完工）→ [[40-issues/dashboard#owner-必做清单]]

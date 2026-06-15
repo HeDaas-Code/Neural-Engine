@@ -2,15 +2,17 @@
 
 > **TL;DR**：本工作 Wiki 自身的来龙去脉——什么时候建的、追踪到哪一步、下一步更新什么。
 
-## 创建背景（2026-06-15 仓库还原后）
+## 创建背景（2026-06-15 仓库还原后 → 已恢复）
 
-- **触发事件**：用户还原代码库，导致之前的 `Neural Engine-vault/` 被覆盖
-- **用户指令**："重新按照工作流生成一下，这此 vault 命名为工作 Wiki，并提交 github，同时作为项目 Wiki 而存在"
-- **策略调整**：
+- **触发事件 1（2026-06-14）**：用户还原代码库，导致之前的 `Neural Engine-vault/` 被覆盖
+- **用户指令 1**："重新按照工作流生成一下，这此 vault 命名为工作 Wiki，并提交 github，同时作为项目 Wiki 而存在"
+- **策略调整 1**：
   1. 名称：`Neural Engine-vault/` → **`工作Wiki/`**（中文名）
   2. 位置：项目根下 `工作Wiki/`（之前在仓库外）
   3. 提交：**GitHub main 分支** + **GitHub Wiki 引擎**双推送
   4. 角色：本地分析载体 **+** 项目 Wiki 双重身份
+- **触发事件 2（2026-06-15）**：用户报"cursor 编码完成"，要求"初始化 code 图，结合 MCP / issue / 代码原文更新 wiki"
+- **结果 2**：cursor 在 `df8a49a` 之后连发 19 个 feat commit，把 v0-issue-1 ~ v0-issue-19 全部实现（HEAD = `1a76382`，152/152 测试通过）。codegraph MCP 不可用（stdio 模式未对外暴露），但用直接读代码的方式做了完整偏差审计（3 偏差 + 7 确认），写进 `[[../30-protocol/implementation-deviations]]`
 
 ## 工作流执行（按 8 步）
 
@@ -129,27 +131,31 @@ raw-docs/
     └── 工程笔记/（22 + 2 = 24 个）
 ```
 
-## 与上一轮的区别
+## 与上一轮的区别（**已被 2026-06-15 cursor 实施覆盖——见下**）
 
-| 维度 | 上一轮（Neural Engine-vault/）| 本轮（工作Wiki/）|
+| 维度 | 上一轮（Neural Engine-vault/）| 本轮（工作Wiki/，**已被 cursor 实施**）|
 | --- | --- | --- |
 | 命名 | Neural Engine-vault | **工作Wiki**（中文）|
 | 位置 | 仓库内但 .gitignore | **仓库内但会被 commit**（作为项目 Wiki）|
 | 提交 GitHub | 否 | **是**（main + wiki 分支双推）|
-| Issue 体系 | 18 个 GH #2~#21 + v0-issue-N | **22 个 GH #22~#44** + v0-issue-1~19（19 ready-for-agent）+ #20/#21 HITL |
-| HITL 数量 | 1（#15）| **2**（#43 / #44）|
-| 还原前实现 | 53 测试通过 | **0**（仓库被还原）|
-| GUI 路径 | 单路径（PyQt6 占位）| **三路径**（PyQt6 / CLI / pytest）|
-| 包结构 | `src.core.engine`（物理 `src/core/...`，import 不带 src）| **`core.engine`**（物理 `src/core/engine/`，import 不带 src）|
+| Issue 体系 | 18 个 GH #2~#21 + v0-issue-N | 22 个 GH #22~#44 + v0-issue-1~19（19 ready-for-agent）+ #20/#21 HITL |
+| HITL 数量 | 1（#15）| 2（#43 / #44）|
+| 还原前实现 | 53 测试通过 | **0（还原时）→ 152/152（cursor 实施后）** |
+| GUI 路径 | 单路径（PyQt6 占位）| **三路径**（PyQt6 / CLI / pytest）——**实际只实现路径 B** |
+| 包结构 | `src.core.engine`（物理 `src/core/...`，import 不带 src）| `core.engine`（物理 `src/core/engine/`，import 不带 src）|
+| 代码 vs spec 偏差 | 未做审计 | **3 偏差 + 7 确认**（见 [[../30-protocol/implementation-deviations]]）|
+| 完工状态 | 仓库被还原 | **v0-issue-1 ~ 19 全部代码已落地 + 2 HITL 待 owner** |
 
 ## 待办（wiki 视角）
 
 | 任务 | 触发 | 动作 |
 | --- | --- | --- |
-| 跟踪 issue 实现 | 用户开始做 `#23` | 在 wiki 加 `40-issues/in-progress.md` 记当前进度 |
-| 跟踪 ADR-0002 | `#44` 发布 | 加 `10-design/v1-changelog.md` 记实现偏差 |
-| 跟踪 runtime | core 完工时 | 读 [[raw-docs/CONTEXT-runtime.md]] |
-| 跟踪 editor | v2+ 启动时 | 读 [[raw-docs/CONTEXT-editor.md]] |
+| 跟踪 #43 HITL 完成 | owner 跑 3 条 grep + 写 audit | 加 `docs/audit/v0-invariant-audit.md` 链接到 [[../30-protocol/implementation-deviations#owner-必做]] |
+| 跟踪 #44 HITL 完成 | owner 写 ADR-0002 + close issues | 写 `docs/adr/0002-v0-engine-implementation.md` 登记 4 条偏差 |
+| 跟踪 M2（真实运行时）| owner 决定启动 v1+ | 新增 `10-design/v1-design.md` + `40-issues/m2-roadmap.md` |
+| 跟踪 editor | v2+ 启动时 | 读 [[raw-docs/CONTEXT-editor.md]] + 新增 `20-architecture/editor-design.md` |
+| 跟踪 ADR-0002 内容 | #44 发布后 | 把 4 条偏差登记贴进 wiki |
+| 跟踪 implementation-deviations 修订 | owner 接受/拒绝偏差 | 偏差状态从 🟡 改 ✅ 或 🔴 改 ✅ |
 
 ## 双向引用状态
 
