@@ -4,5 +4,5 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
-.codegraph/
-.obsidian/
+.codegraph/    # CodeGraph SQLite 索引（不在仓库内共享；每个开发者本地 init）
+.obsidian/     # Obsidian 本地配置

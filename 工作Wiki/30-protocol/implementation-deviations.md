@@ -1,8 +1,8 @@
-# 30 · 实现 vs 规范偏差（实测版）
+# 30 · 实现 vs 规范偏差（实测版 + CodeGraph 验证）
 
-> **TL;DR**：基于 `src/core/engine/` 7 个 .py 实测代码 vs raw-docs spec 审计 —— 3 条**真实偏差** + 7 条**确认符合**。所有 22 个 GH issue（含 19 ready-for-agent + 2 HITL + 1 父 PRD）都 OPEN，但代码 100% 落地（152/152 测试通过）。
+> **TL;DR**：基于 `src/core/engine/` 7 个 .py 实测代码 vs raw-docs spec 审计 —— 3 条**真实偏差** + 7 条**确认符合** + **4 条 CodeGraph 发现的覆盖盲点**。所有 22 个 GH issue（含 19 ready-for-agent + 2 HITL + 1 父 PRD）都 OPEN，但代码 100% 落地（152/152 测试通过）。
 
-> **本页面是实测依据 wiki 页**；每条偏差都标 commit SHA + raw-docs 出处 + 评估建议。
+> **CodeGraph 索引**（2026-06-15 由 `codegraph init` 建立，37 文件 / 470 nodes / 1566 edges in 233ms）——本页面所有行号、调用关系、覆盖盲点都来自 `codegraph_explore` / `codegraph_callers` 实时查询。
 
 ## 仓库状态（2026-06-15 实测）
 
@@ -73,6 +73,93 @@
 2. 如果 owner 不希望 ADR-0001 被推翻，要么回代码（在 `run_block` 末尾清）要么回 spec（接受新决策）。
 
 → 这正是 owner 必须亲手做 #43 / #44 HITL 的原因 —— **agent 不能替 owner 拍 ADR 决策**。
+
+## CodeGraph 调用关系图（实测）
+
+### 高频被调符号
+
+| 符号 | 位置 | caller 数 | 覆盖测试 |
+|---|---|---|---|
+| `EngineBus` | `bus.py:18` | **13** callers（main + GUI + tests）| ✅ `test_engine_bus.py` + `test_echo_path.py` |
+| `Executor.run` | `executor.py:141` | **28** callers | ✅ 4 个 test_executor_*.py |
+| `Executor` class | `executor.py:68` | **36** callers | ✅ 4 个 test_executor_*.py + 集成 |
+| `main` (core) | `main.py:67` | 7 callers | ✅ `test_main_entry.py` + `test_gui_protocol.py` |
+| `get_evt` | `bus.py:51` | 4 callers（GUI + tests）| ✅ `test_engine_bus.py` |
+| `get_cmd` | `bus.py:42` | 3 callers | ✅ `test_engine_bus.py` + `test_echo_path.py` |
+| `LoadChapterCmd` | `protocol.py:54` | 3 callers | ✅ `test_engine_bus.py` + `test_protocol_cmd.py` |
+
+### 内部 helper（低 caller 数 = 单独测的必要性）
+
+| 符号 | 位置 | caller 数 | 覆盖测试 |
+|---|---|---|---|
+| `_emit_decorator` | `executor.py:214` | 1（self）| ⚠️ **no covering tests found** |
+| `_validate_target_ids` | `executor.py:84` | 1（self）| ⚠️ **no covering tests found** |
+| `_drain` | `bus.py:63` | 1（self）| ⚠️ **no covering tests found** |
+| `_close_queue` | `bus.py:74` | 1（self）| ⚠️ **no covering tests found** |
+| `_try_spawn_gui` | `main.py:54` | 1（self）| ⚠️ **no covering tests found**（间接通过集成测试覆盖）|
+
+## CodeGraph 发现的 4 条覆盖盲点（新增！）
+
+> **以下盲点**通过 `codegraph_explore` 自动检测 —— 内层 helper 方法，**没有专门的单元测试**覆盖。pytest 152/152 全过 = **间接路径被走过**（helper 在其他测试路径里被调用），但**直接单测缺失**。
+
+### GAP-1 · `EngineBus._drain` / `_close_queue`（`bus.py:63-74`）
+
+| 维度 | 内容 |
+|---|---|
+| **位置** | `src/core/engine/bus.py:63, 74` |
+| **职责** | 队列排空 + 关闭（v0-issue-5 acceptance "close() 排空残留"） |
+| **覆盖** | 无直接单测 ——`test_engine_bus.py` 覆盖了 put/get/序列化/错误，但 `_drain` 只被 `close()` 调，路径隐式 |
+| **风险** | 如果 `_drain` 实现改坏（比如改循环条件），没有任何单测报错；只有 e2e 流才能暴露 |
+| **owner 评估建议** | v0-issue-21 HITL 阶段可选：补 `test_engine_bus.py::test_drain_empty_queue` / `test_close_with_pending_messages` |
+
+### GAP-2 · `Executor._emit_decorator`（`executor.py:214`）
+
+| 维度 | 内容 |
+|---|---|
+| **位置** | `src/core/engine/executor.py:214` |
+| **职责** | 调度 `DecoratorCall` / `DecoratorStop` → `_deco_state` 更新 + `DecoratorEvt` 广播 |
+| **覆盖** | **间接**——`test_executor_decorator.py` 测装饰器效果但走 `run_block` 全路径；`_emit_decorator` 不被外部直接调 |
+| **风险** | 中等——这是 v0-issue-15 关键实现，**节点执行的核心**。如果 `DecoratorStop` 处理坏（`_deco_state[name].pop(key, None)`），只能从高阶测试看现象 |
+| **owner 评估建议** | v0-issue-20 HITL 加直接单测：`test_emit_decorator_call_kv` / `test_emit_decorator_stop_unsets_key` |
+
+### GAP-3 · `Executor._validate_target_ids`（`executor.py:84`）
+
+| 维度 | 内容 |
+|---|---|
+| **位置** | `src/core/engine/executor.py:84` |
+| **职责** | 构造时校验所有 `NextId.target_id` / `NextDecl.target_id` / `If.branches[i].target` 都能在 `story.blocks` 找到 |
+| **覆盖** | **间接**——`test_executor_skeleton.py` 测试跨块 ID 校验通过 `Executor(story, sink)` 抛 ValueError 路径；但 `_validate_target_ids` 是私有方法，不被直接测 |
+| **风险** | 低——`test_executor_skeleton.py` 已经覆盖 ValueError 抛出；只是 helper 本身没单独单测 |
+| **owner 评估建议** | v0-issue-20 HITL 可选补：`test_validate_target_ids_raises_on_unknown_next_decl` |
+
+### GAP-4 · `core.engine.main._try_spawn_gui`（`main.py:54`）
+
+| 维度 | 内容 |
+|---|---|
+| **位置** | `src/core/engine/main.py:54` |
+| **职责** | `subprocess.Popen(["-m", "runtime.gui.main"])` + `FileNotFoundError` 容错 |
+| **覆盖** | **间接**——`test_main_entry.py` 测 GUI 不可用降级路径；但 `_try_spawn_gui` 是私有方法 |
+| **风险** | 低——降级逻辑只是 `try/except FileNotFoundError` |
+| **owner 评估建议** | 可选补 `test_try_spawn_gui_returns_none_when_module_missing` |
+
+### GAP 总评
+
+> **不是 v0 阻塞问题**——pytest 152/152 全过 = 间接覆盖足够。但 CodeGraph 的"no covering tests found"是**真信号**：说明这些 helper 只走"快乐路径"被测，**没有"边界路径"专门单测**（如 `_drain` 空队列 / `_emit_decorator` 嵌套修饰器 / `_validate_target_ids` 多分支冲突）。
+>
+> v0-issue-20 HITL 阶段 owner 可决定是否补这些单测（ADR-0002 决策：v0 范围还是 v1+）。
+
+## 引用源
+
+- `src/core/engine/` 7 个 .py —— `find src -name "*.py"`（实测全文）
+- `chapters/chapter01.md` —— ADR §附录 A 字节级副本
+- CodeGraph 索引 —— `codegraph init` 在 `.codegraph/codegraph.db`（1.4 MB SQLite）
+- CodeGraph 调用关系 —— `codegraph_callers` / `codegraph_explore` MCP 查询
+- ADR-0001 / ADR-0002（待写）—— [[raw-docs/ADR-0001-v0-baseline-script-spec]]
+- 22 个 GH issue 完成评论 —— `gh issue view N --comments`
+- 19 个 feat commit —— `git log --oneline`（HEAD = `1a76382`）
+- pytest 结果 —— `python -m pytest tests/ -q`（152 passed）
+- [[40-issues/dashboard]] — 22 issue 总览
+- [[dependency-graph]] — 实施路径图
 
 ## 路径 B GUI 实测
 
