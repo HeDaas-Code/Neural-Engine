@@ -24,9 +24,9 @@ def _loc() -> BlockLocation:
 
 
 def _story_start_only() -> Story:
-    """id:start 块，只有 Start sentinel。"""
+    """id:start 块，只有 Start sentinel + id:end0（无 chapter）。"""
     start_block = Block(
-        meta=(IdMeta(id="start", lineno=1),),
+        meta=(IdMeta(id="start", lineno=1), IdEnd(x=0, route_chapter=None, lineno=2)),
         next_table=(),
         body=(Start(),),
         loc=_loc(),
@@ -105,6 +105,7 @@ def test_executor_runs_start_block_to_start_sentinel_without_error():
     exe = Executor(story, sink)
     exe.run()  # 不抛
     # 没事件（Start sentinel 不发，End 也没因为无 next 也无 id:endX）
+    # 注：此块无 id:endX 也不设 next → RuntimeError。改用有 id:end0 的块。
 
 
 # 4. 缺 id:start
@@ -123,13 +124,9 @@ def test_executor_missing_id_start_raises_value_error():
         exe.run()
 
 
-# 5. run_block on Text → NotImplementedError
-def test_executor_run_block_on_text_raises_not_implemented():
-    story = _story_with_text()
-    sink = MemoryEventSink()
-    exe = Executor(story, sink)
-    with pytest.raises(NotImplementedError):
-        exe.run()  # Text 节点会触发 NotImplementedError
+# 5. v0-issue-13 占位：Text 节点 → NotImplementedError
+# 已被 v0-issue-14 覆盖——Text 现在发 TextEvt，不再抛 NotImplementedError
+# 此处保留为注释（不再有 test 5）
 
 
 # 6. end + chapter → RouteEvt
