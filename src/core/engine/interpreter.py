@@ -490,6 +490,9 @@ import re
 _BINARY_IF_RE = re.compile(r"^node if\s+(\w+)\s*\[(\w+),(\w+)\]\s*$")
 _MULTI_IF_RE = re.compile(r"^node if\s+(\w+)\s*\[([^\]]+)\]\s*$")
 _SHORTCUT_IF_RE = re.compile(r"^node\s*\[([^?]+)\?(\w+):(\w+)\]\s*$")
+# v1-issue-5: 新增 bool_expr (if? + 表达式) 和 range (if var ~ lo~hi) 形态
+_BOOL_EXPR_IF_RE = re.compile(r"^node if\?\s+(.+?)\s*\[([^\]]+)\]\s*$")
+_RANGE_IF_RE = re.compile(r"^node if\s+(\w+)\s+~\s*(-?\d+)~(\d+)\s*\[([^\]]+)\]\s*$")
 
 
 def _build_next_lookup(next_table: list[NextDecl]) -> dict[str, NextDecl]:
@@ -565,6 +568,25 @@ def parse_if_stmt(
             ),
         )
 
+    # v1-issue-5: bool_expr 形态 `node if? 表达式 [1:a,2:b]`
+    # 必须在 binary/multi 之前匹配, 否则 `if?` 会被二元/multi 吞
+    m = _BOOL_EXPR_IF_RE.match(s)
+    if m:
+        expr, body = m.group(1).strip(), m.group(2)
+        branches_list = _parse_multi_branches(body, lineno, next_lookup)
+        return If(cond=("bool_expr", expr), branches=tuple(branches_list))
+
+    # v1-issue-5: range 形态 `node if var ~ lo~hi [...]`
+    # 必须在 binary 之前匹配 (binary 期望 `[a,b]` 紧跟 var, 不期望 `~lo~hi`)
+    m = _RANGE_IF_RE.match(s)
+    if m:
+        var_name, lo_str, hi_str, body = m.group(1), m.group(2), m.group(3), m.group(4)
+        branches_list = _parse_multi_branches(body, lineno, next_lookup)
+        return If(
+            cond=("range", (int(lo_str), int(hi_str))),
+            branches=tuple(branches_list),
+        )
+
     # 二元
     m = _BINARY_IF_RE.match(s)
     if m:
@@ -581,36 +603,39 @@ def parse_if_stmt(
     m = _MULTI_IF_RE.match(s)
     if m:
         var_name, body = m.group(1), m.group(2)
-        # 拆 "1:a,2:b,3:echo p_pick" → [(1, "a"), (2, "b"), (3, "echo p_pick")]
-        items = [it.strip() for it in body.split(",") if it.strip()]
-        branches_list = []
-        for it in items:
-            if ":" not in it:
-                # 整项可能是 "node xxx"（无 数字: 前缀）——直接当裸分支项
-                target = _parse_branch_item(it, lineno, next_lookup)
-                # 多元必须配 value——给个临时 val=0（实际 v0 阶段应报"无 value"）
-                # 这种情况是测试 5 的 [node a,node b]——按 ADR 应是二元形式
-                # 二元已先于多元匹配，所以到这里不应有——保护性抛错
-                raise ParserError(
-                    f"multi-if branch item missing 'N:' prefix: {it!r} at line {lineno}",
-                    loc=BlockLocation(lineno=lineno, col=1),
-                )
-            val_str, item = it.split(":", 1)
-            try:
-                val = int(val_str.strip())
-            except ValueError:
-                raise ParserError(
-                    f"branch value must be integer, got {val_str!r} at line {lineno}",
-                    loc=BlockLocation(lineno=lineno, col=1),
-                )
-            target = _parse_branch_item(item, lineno, next_lookup)
-            branches_list.append(Branch(value=val, target=target))
+        branches_list = _parse_multi_branches(body, lineno, next_lookup)
         return If(cond=("var", var_name), branches=tuple(branches_list))
 
     raise ParserError(
         f"malformed 'node if' at line {lineno}: {s!r}",
         loc=BlockLocation(lineno=lineno, col=1),
     )
+
+
+def _parse_multi_branches(body: str, lineno: int, next_lookup: dict) -> list:
+    """把 '1:a,2:b,3:echo p_pick' 拆成 [Branch(...)]——bool_expr / range / multi 复用。
+
+    拆分逻辑：每项 "N:item" 必须是 N: 前缀（v0 既有规则）。
+    """
+    items = [it.strip() for it in body.split(",") if it.strip()]
+    branches_list: list = []
+    for it in items:
+        if ":" not in it:
+            raise ParserError(
+                f"multi-if branch item missing 'N:' prefix: {it!r} at line {lineno}",
+                loc=BlockLocation(lineno=lineno, col=1),
+            )
+        val_str, item = it.split(":", 1)
+        try:
+            val = int(val_str.strip())
+        except ValueError:
+            raise ParserError(
+                f"branch value must be integer, got {val_str!r} at line {lineno}",
+                loc=BlockLocation(lineno=lineno, col=1),
+            )
+        target = _parse_branch_item(item, lineno, next_lookup)
+        branches_list.append(Branch(value=val, target=target))
+    return branches_list
 
 
 # ─── 第七阶段：修饰器解析 ─────────────────────────────────────────────────────
