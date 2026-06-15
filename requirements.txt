@@ -1,0 +1,3 @@
+# v0 阶段无生产运行时依赖
+# 引擎核心是标准库（multiprocessing、json、dataclasses、pathlib）
+# 后续 v0+ 再追加
