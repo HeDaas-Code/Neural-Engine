@@ -18,9 +18,9 @@
 | 代码 | **`src/core/engine/` 7 个 .py + `src/runtime/gui/main.py` + `src/core/decorators/`（空包）**——v0-issue-1 ~ 19 全部落地 |
 | 文档 | ADR-0001（19 KB）+ PRD-0001（已转 issue #22）+ CLAUDE.md + CONTEXT-MAP.md |
 | 工程笔记 | 22 个 v0-issue-XX.md 在 `tmp/issues/`（Cursor 产出，本 wiki raw-docs/工程笔记/ 拷贝了）|
-| Issue 队列 | GH #22~#44（22 个，**全部 OPEN**，但 cursor 都发了完成评论）|
-| 测试 | **152/152 passed in 1.22s**（`python -m pytest tests/ -q`）|
-| 实现进度 | **20/22**（代码完成；2 HITL #43 #44 待 owner）|
+| Issue 队列 | GH #22~#44（22 个，**全部 CLOSED** ✅）|
+| 测试 | **182/182 passed in 8.04s**（152 原有 + 30 新增 v0-issue-20 守护）|
+| 实现进度 | **22/22**（v0 全部闭环）|
 
 ## 主题路径
 

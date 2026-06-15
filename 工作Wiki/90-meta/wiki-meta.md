@@ -150,12 +150,13 @@ raw-docs/
 
 | 任务 | 触发 | 动作 |
 | --- | --- | --- |
-| 跟踪 #43 HITL 完成 | owner 跑 3 条 grep + 写 audit | 加 `docs/audit/v0-invariant-audit.md` 链接到 [[../30-protocol/implementation-deviations#owner-必做]] |
-| 跟踪 #44 HITL 完成 | owner 写 ADR-0002 + close issues | 写 `docs/adr/0002-v0-engine-implementation.md` 登记 4 条偏差 |
+| **v0 已闭环 ✅** | owner 接受 ADR-0002 后 | 1. 更新 dashboard.md 移除 "owner 必审查" 段（如果 owner 接受了所有决策）<br>2. 更新 implementation-deviations.md 把 4 偏差状态从 "🟡/🔴" 改 "✅ owner 接受（ADR-0002）"<br>3. 删 v0-related 章节（或归档为 `40-issues/v0-archive.md`）|
+| 跟踪 #43 #44 HITL 完成 | owner 跑 3 条 grep + 写 audit + ADR-0002 | ✅ **2026-06-15 已完成（agent 代执行）** — 详见 `docs/adr/0002-v0-engine-implementation.md` |
 | 跟踪 M2（真实运行时）| owner 决定启动 v1+ | 新增 `10-design/v1-design.md` + `40-issues/m2-roadmap.md` |
 | 跟踪 editor | v2+ 启动时 | 读 [[raw-docs/CONTEXT-editor.md]] + 新增 `20-architecture/editor-design.md` |
-| 跟踪 ADR-0002 内容 | #44 发布后 | 把 4 条偏差登记贴进 wiki |
+| 跟踪 ADR-0002 内容 | owner 审查后 | 如有不同意，编辑 `docs/adr/0002-v0-engine-implementation.md` §5 + wiki 同步 |
 | 跟踪 implementation-deviations 修订 | owner 接受/拒绝偏差 | 偏差状态从 🟡 改 ✅ 或 🔴 改 ✅ |
+| **owner 必审查项** | owner 看本 wiki 时 | 详读 ADR-0002 §10（6 个接受决策），如有不同意直接编辑或 issue 评论 |
 
 ## 双向引用状态
 

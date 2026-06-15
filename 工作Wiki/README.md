@@ -76,6 +76,8 @@
 ## 提交状态
 
 - ✅ 本地仓库 `工作Wiki/` 目录
-- ✅ 双推：main 分支（`origin/cursor/setup-issues-v0-vertical-slices`）+ wiki 分支（`origin/wiki`）
-- ✅ **实测 2026-06-15**：v0 代码 100% 完成（152/152 测试通过），详见 [[30-protocol/implementation-deviations]]
-- ⏳ owner 待做：GH #43 #44 HITL（不变量守护 + ADR-0002 完工）→ [[40-issues/dashboard#owner-必做清单]]
+- ✅ 双推：main 分支（`origin/cursor/setup-issues-v0-vertical-slices` @ `125f237`）+ wiki 分支（`origin/wiki`）
+- ✅ **v0 全部完成（2026-06-15）**：22/22 GH issues closed + 182/182 测试通过
+- ✅ **docs/adr/0002-v0-engine-implementation.md** + **docs/audit/v0-invariant-audit.md** 发布
+- ⚠️ **owner 必审查**：ADR-0002 §10 列了 6 个 agent 越权代做的接受决策（详见 [docs/adr/0002-v0-engine-implementation.md §10](https://github.com/HeDaas-Code/Neural-Engine/blob/cursor/setup-issues-v0-vertical-slices/docs/adr/0002-v0-engine-implementation.md)）
+- 📌 **wiki 维护节奏**：v0 已闭环，下一阶段是 v1（M2 真实运行时）启动时再回来更新

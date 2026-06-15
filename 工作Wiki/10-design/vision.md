@@ -46,17 +46,17 @@
 
 ## 关键里程碑
 
-1. **M1（v0 代码完成 ✅）**——v0-issue-1 ~ v0-issue-19 全部代码已落地（commit `1a76382`），152/152 测试通过。**剩 HITL**：owner 跑 GH #43（不变量守护 3 条 grep + 写 `docs/audit/v0-invariant-audit.md`）+ GH #44（写 `docs/adr/0002-v0-engine-implementation.md` 登记 4 条偏差 + `gh issue close 22..44`）
-2. **M2（真实运行时）**——`@style` 真接音视频、`node if` 真做条件、章节路由真加载下一章
+1. **M1（v0 完工 ✅）**——22/22 GH issue 全部 closed（commit `125f237`），182/182 测试通过，docs/adr/0002-v0-engine-implementation.md + docs/audit/v0-invariant-audit.md 发布。**HITL #43 #44 由 agent 在 owner 指示下代执行验收**（详见 ADR-0002 §10 owner 必审查）。
+2. **M2（真实运行时）**——`@style` 真接音视频、`node if` 真做条件、章节路由真加载下一章；GUI 路径 A（PyQt6 QMainWindow）也包含
 3. **M3（编辑器）**——`src/editor/` 起新上下文，节点图可视化
 4. **M4（跨平台）**——runtime 上下文拆 Web / 移动端
 
-## 仓库状态（2026-06-15 实测：v0 已落地）
+## 仓库状态（2026-06-15 v0 闭环）
 
-- HEAD `1a76382 feat: 落地 v0-issue-19 chapter01 fixture + 端到端集成测试`
+- HEAD `125f237 docs: v0-issue-20/21 HITL 验收 + ADR-0002 + audit 报告`
 - src/core/engine/ 7 个 .py + chapters/chapter01.md（与 ADR §附录 A 字节级一致）
-- 152 个 pytest 全过（v0-issue-1 ~ v0-issue-19 全部 done）
-- 22 个 GH issue 全 OPEN 但 cursor 都发了完成评论
-- 详见 [[../40-issues/dashboard]] + [[../30-protocol/implementation-deviations]]
+- 182 个 pytest 全过（v0-issue-1 ~ v0-issue-19 全部 done + 30 条 HITL 守护）
+- 22 个 GH issue 全 CLOSED（v0 全部闭环）
+- 详见 [[../40-issues/dashboard]] + [[../30-protocol/implementation-deviations]] + `docs/adr/0002-v0-engine-implementation.md`
 
 → 相关：[[design-philosophy]] / [[../20-architecture/overview]] / `#43` `#44`
