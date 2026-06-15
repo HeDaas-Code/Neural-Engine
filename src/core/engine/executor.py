@@ -12,13 +12,13 @@ from typing import Protocol
 
 from core.engine.ast_nodes import (
     Story, Block, Start, End, IdMeta, IdEnd,
-    Text, In, Echo, NextId, If,
+    Text, In, Echo, NextId, If, Branch, CallExpression, NextDecl,
     DecoratorCall, DecoratorStop,
 )
 from core.engine.protocol import (
     RouteEvt, ChapterEndEvt,
     TextEvt, PromptInputEvt, UserInputCmd,
-    DecoratorEvt,
+    DecoratorEvt, LogEvt,
 )
 
 
@@ -103,6 +103,17 @@ class Executor:
                 raise ValueError(
                     f"unknown target id {tid!r}{loc_str}"
                 )
+        # v0-issue-16: If 分支项是 NextDecl 的 target_id
+        for block in self.story.blocks:
+            for node in block.body:
+                if isinstance(node, If):
+                    for branch in node.branches:
+                        if isinstance(branch.target, NextDecl):
+                            if branch.target.target_id not in all_ids:
+                                raise ValueError(
+                                    f"unknown target id {branch.target.target_id!r} "
+                                    f"in if branch at line {branch.target.lineno}"
+                                )
 
     def _find_entry_block(self) -> Block:
         """找 entry_id 块（默认 'start'）。"""
@@ -192,9 +203,12 @@ class Executor:
             if isinstance(node, DecoratorStop):
                 self._emit_decorator(node)
                 continue
-            # 留给 v0-issue-16
+            if isinstance(node, If):
+                self._execute_if(node)
+                continue
+            # 留给未来
             raise NotImplementedError(
-                f"node not yet implemented in v0-issue-15: {type(node).__name__}"
+                f"node not yet implemented: {type(node).__name__}"
             )
 
     def _emit_decorator(self, deco) -> None:
@@ -209,6 +223,26 @@ class Executor:
             if deco.name in self._deco_state:
                 self._deco_state[deco.name].pop(deco.key, None)
             self.sink.put_evt(DecoratorEvt(name=deco.name, args=[deco.key]))
+
+    def _execute_if(self, if_node: If) -> None:
+        """v0-issue-16: node if 打桩——永远选第一分支。"""
+        chosen = if_node.branches[0]
+        self.sink.put_evt(LogEvt(
+            level="info",
+            message=f"node if stubbed: chose branch {chosen.value}",
+        ))
+        # 解析分支目标
+        target = chosen.target
+        if isinstance(target, NextDecl):
+            self.next = (target.var_name, target.target_id)
+        elif isinstance(target, CallExpression):
+            # echo / in 模拟：广播对应事件；v0 打桩不跳（self.next 不变）
+            if target.kind == "echo":
+                val = self.state.vars.get(target.var, "")
+                self.sink.put_evt(TextEvt(content=val, style="narration"))
+            elif target.kind == "in":
+                # v0 阶段不阻塞——只广播
+                self.sink.put_evt(PromptInputEvt(var=target.var))
 
     def _handle_end(self, block: Block) -> None:
         """处理 node end：NEXT 跳转 / RouteEvt / ChapterEndEvt / RuntimeError。"""
