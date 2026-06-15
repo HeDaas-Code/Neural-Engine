@@ -64,6 +64,36 @@ _SHORTCUT_TERNARY_RE = re.compile(
 _COLLAPSE_WS = re.compile(r"\s+")
 
 
+# 字符串字面量保护 (按 docs/prototypes/v0-issue-2-translator/NOTES.md 结论 4)
+# 扫描 "..." / '...' 区间, 替换为不可见 PUA 占位符 (U+E000 私有区),
+# 让关键字替换跳过这些位置, 跑完再还原.
+_STRING_LITERAL_RE = re.compile(r'"[^"\n]*"|\'[^\'\n]*\'')
+_SENTINEL = "\ue000"  # PUA 起始字符
+
+
+def _protect_string_literals(s: str) -> tuple[str, list[str]]:
+    """把字符串字面量替换为 PUA 占位符。
+
+    Returns:
+        (替换后字符串, 原文字面量列表)
+    """
+    protected: list[str] = []
+
+    def _stash(m: re.Match[str]) -> str:
+        token = _SENTINEL + str(len(protected)) + _SENTINEL
+        protected.append(m.group(0))
+        return token
+
+    return _STRING_LITERAL_RE.sub(_stash, s), protected
+
+
+def _restore_string_literals(s: str, protected: list[str]) -> str:
+    """把 PUA 占位符还原为原文字面量。"""
+    for i, original in enumerate(protected):
+        s = s.replace(_SENTINEL + str(i) + _SENTINEL, original)
+    return s
+
+
 class ExprTranslator:
     """DSL 文本 → Python 表达式字符串。
 
@@ -99,23 +129,25 @@ class ExprTranslator:
         if not s:
             raise DSLSyntaxError("empty DSL expression")
 
+        # 0. 字符串字面量保护 (NOTES 结论 4)
+        s, protected = _protect_string_literals(s)
+
         # 1. 简略 ?: 翻译 (v1 占位, v2 拓展)
         m = _SHORTCUT_TERNARY_RE.match(s)
         if m:
-            # 形如 a?b:c → Python 三元: b if a else c
             a, b, c = m.group("a").strip(), m.group("b").strip(), m.group("c").strip()
-            # 注意: a 自身可能含 DSL 关键字, 递归翻译
             py_a = self._apply_keyword_replacements(a)
-            return f"({b}) if ({py_a}) else ({c})"
+            result = f"({b}) if ({py_a}) else ({c})"
+        else:
+            # 2. Chinese 关键字替换
+            result = self._apply_keyword_replacements(s)
 
-        # 2. Chinese 关键字替换
-        result = self._apply_keyword_replacements(s)
-
-        # 3. 用户自定义 keyword_table (v2+ 占位)
+        # 3. 用户自定义 keyword_table
         for dsl_kw, py_expr in self._keyword_table.items():
             result = result.replace(dsl_kw, py_expr)
 
-        return result
+        # 4. 还原字符串字面量
+        return _restore_string_literals(result, protected)
 
     def _apply_keyword_replacements(self, s: str) -> str:
         """按 _KEYWORD_REPLACEMENTS 表逐条替换 Chinese 关键字。

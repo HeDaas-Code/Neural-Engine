@@ -103,3 +103,46 @@ class TestErrorCases:
         t = ExprTranslator()
         with pytest.raises(DSLSyntaxError):
             t.to_python_expr("   ")
+
+
+# 5. v1-issue-2 新增: 字符串字面量保护
+#
+# 按 docs/prototypes/v0-issue-2-translator/NOTES.md 结论 4:
+# 引号包裹的中文关键字不应被翻译 ("非 const" 里的 非 不应被吃)
+class TestStringLiteralProtection:
+    def test_双引号内_非_不被翻译(self):
+        t = ExprTranslator()
+        # "非 const" 里的 非 不应被翻译, 但 整体的 等于 1 仍要翻译
+        assert t.to_python_expr('"非 const" 等于 1') == '"非 const" == 1'
+
+    def test_双引号内_包含_不被翻译(self):
+        t = ExprTranslator()
+        # "包含 magic" 里的 包含 不应被翻译
+        assert t.to_python_expr('"包含 magic" 等于 1') == '"包含 magic" == 1'
+
+    def test_双引号内_中文标点_不动(self):
+        t = ExprTranslator()
+        # 普通中文也保留
+        assert t.to_python_expr('"在古代" 且 p_a') == '"在古代" and p_a'
+
+    def test_用户输入_含_PUA_占位符_不冲突(self):
+        """占位符用 PUA (U+E000) 私有区, 正常文本几乎不会含.
+        即便有, 替换是数字索引, 用户须输入 "\ue0000\ue000" 才冲突, 极小概率.
+        """
+        t = ExprTranslator()
+        # 用户输入里含 \ue000, 不应被误识别
+        result = t.to_python_expr('"\ue000 foo" 且 p_a')
+        assert 'and' in result
+        # PUA 字符应原样保留在引号里
+        assert '\ue000' in result
+
+    def test_单引号_内_非_不被翻译(self):
+        t = ExprTranslator()
+        # 单引号也保护 ('...' 含 非)
+        assert t.to_python_expr("'非 const' 等于 1") == "'非 const' == 1"
+
+    def test_多_字符串_不互相干扰(self):
+        t = ExprTranslator()
+        # 多个字符串字面量, 替换按序, 不混淆
+        result = t.to_python_expr('"非 a" 等于 1 且 "包含 x" 等于 2')
+        assert result == '"非 a" == 1 and "包含 x" == 2'
