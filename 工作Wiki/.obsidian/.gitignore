@@ -1,0 +1,4 @@
+# 忽略 Obsidian 本地配置（v1 决策）
+# https://help.obsidian.md/Advanced+topics/How+Obsidian+stores+data
+*
+!.gitignore
