@@ -268,7 +268,8 @@ def parse_block_meta(meta_lines: list[str], start_lineno: int) -> BlockMeta:
     fence_lineno = start_lineno
     for i, line in enumerate(meta_lines):
         # v0-issue-17 fix: 跳过 'next:' 行（v0-issue-9 parse_next_decls 处理）
-        if line.strip().startswith("next:") or "<-next:" in line:
+        s_check = line.strip().replace("←", "<-")
+        if s_check.startswith("next:") or re.search(r"<-\s*next\s*:", s_check):
             continue
         # 围栏开行是 start_lineno；第一行 meta 在 start_lineno+1
         lineno = fence_lineno + 1 + i
@@ -289,13 +290,21 @@ def parse_block_meta(meta_lines: list[str], start_lineno: int) -> BlockMeta:
 
 
 def _parse_next_line(line: str, lineno: int) -> NextDecl:
-    """解析 'next:xxx' 或 'yyy <-next:xxx' 单行。"""
+    """解析 'next:xxx' 或 'yyy ←next:xxx' / 'yyy <-next:xxx' 单行。
+
+    容忍新旧两种箭头符号（ADR-0004 G1）：
+    - 旧: `<-next:` (v0 fixture 兼容)
+    - 新: `←next:` (规范目标形态)
+    空格容忍: `n2 ← next : cn2` 和 `n2←next:cn2` 都接受。
+    """
     s = line.strip()
-    if "<-next:" in s:
-        # yyy <-next: xxx
-        var_part, target_part = s.split("<-next:", 1)
-        var_name = var_part.strip()
-        target_id = target_part.strip()
+    # 统一 ← → <-
+    s_normalized = s.replace("←", "<-")
+    # 用正则匹配: yyy <- next : xxx（容忍空格变体）
+    m = re.match(r"^(\S+)\s*<-\s*next\s*:\s*(\S+)\s*$", s_normalized)
+    if m:
+        var_name = m.group(1).strip()
+        target_id = m.group(2).strip()
         if not var_name:
             raise ParserError(
                 f"empty variable name in next decl at line {lineno}",
@@ -337,8 +346,9 @@ def parse_next_decls(
         # v0-issue-17 fix: 跳过 'id:' 行（v0-issue-8 parse_block_meta 处理）
         if line.strip().startswith("id:") or "<-next:" in line and "id:" in line:
             continue
-        # 简化：只处理以 next: 开头或包含 <-next: 的行
-        if not (line.strip().startswith("next:") or "<-next:" in line):
+        # 检测 next 声明行：容忍 <- 和 ← 箭头 + 空格变体
+        s_check = line.strip().replace("←", "<-")
+        if not (s_check.startswith("next:") or re.search(r"<-\s*next\s*:", s_check)):
             continue
         lineno = fence_lineno + 1 + i
         decls.append(_parse_next_line(line, lineno))
@@ -389,10 +399,12 @@ def _parse_body_line(line: str, lineno: int):
             return None  # sentinel
         # node in / node echo / node xxx
         if rest.startswith("in"):
-            # "in ->var" / "in->var"
+            # "in ->var" / "in->var" / "in →var" / "in→var"
             after = rest[len("in"):].strip()
-            # 去 -> 前缀
-            if after.startswith("->"):
+            # 去箭头前缀（容忍 → 和 ->）
+            if after.startswith("→"):
+                after = after[len("→"):].strip()
+            elif after.startswith("->"):
                 after = after[len("->"):].strip()
             if not after:
                 raise ParserError(
@@ -401,13 +413,17 @@ def _parse_body_line(line: str, lineno: int):
                 )
             return In(var=after)
         if rest.startswith("echo"):
-            var = rest[len("echo"):].strip()
-            if not var:
+            after = rest[len("echo"):].strip()
+            if not after:
                 raise ParserError(
                     f"empty var after 'node echo' at line {lineno}",
                     loc=BlockLocation(lineno=lineno, col=1),
                 )
-            return Echo(var=var)
+            # ADR-0004 G4: echo 拼接 (node echo var + text + ...)
+            if " + " in after:
+                parts = tuple(p.strip() for p in after.split(" + ") if p.strip())
+                return Echo(parts=parts)
+            return Echo(var=after)
         # node xxx (xxx = next_id 形)
         # 本 issue 把任何 node xxx 视为 NextId，校验留给 v0-issue-16
         if rest:
@@ -490,6 +506,11 @@ import re
 _BINARY_IF_RE = re.compile(r"^node if\s+(\w+)\s*\[(\w+),(\w+)\]\s*$")
 _MULTI_IF_RE = re.compile(r"^node if\s+(\w+)\s*\[([^\]]+)\]\s*$")
 _SHORTCUT_IF_RE = re.compile(r"^node\s*\[([^?]+)\?(\w+):(\w+)\]\s*$")
+# ADR-0004: 表达式条件
+# 二元表达式: node if <expr> [a, b]  (True→a, False→b)
+_EXPR_BINARY_IF_RE = re.compile(r"^node if\s+(.+?)\s*\[(\w+),\s*(\w+)\]\s*$")
+# 多元表达式: node if <expr> [1:a, 2:b, ...]  (result 值匹配)
+_EXPR_IF_RE = re.compile(r"^node if\s+(.+?)\s*\[([^\]]+)\]\s*$")
 
 
 def _build_next_lookup(next_table: list[NextDecl]) -> dict[str, NextDecl]:
@@ -577,6 +598,18 @@ def parse_if_stmt(
             ),
         )
 
+    # ADR-0004: 表达式二元 node if <expr> [a, b] (True→a, False→b)
+    m = _EXPR_BINARY_IF_RE.match(s)
+    if m:
+        expr_str, a, b = m.group(1).strip(), m.group(2), m.group(3)
+        return If(
+            cond=("expr", expr_str),
+            branches=(
+                Branch(value=0, target=_lookup(a)),
+                Branch(value=1, target=_lookup(b)),
+            ),
+        )
+
     # 多元
     m = _MULTI_IF_RE.match(s)
     if m:
@@ -606,6 +639,32 @@ def parse_if_stmt(
             target = _parse_branch_item(item, lineno, next_lookup)
             branches_list.append(Branch(value=val, target=target))
         return If(cond=("var", var_name), branches=tuple(branches_list))
+
+    # ADR-0004: 表达式条件 node if <expr> [...]
+    # 捕获所有 node if 后面不是单个 \w+ 的情况（如 pick == 1, tall >= 18 and age > 20）
+    m = _EXPR_IF_RE.match(s)
+    if m:
+        expr_str = m.group(1).strip()
+        body = m.group(2)
+        items = [it.strip() for it in body.split(",") if it.strip()]
+        branches_list = []
+        for it in items:
+            if ":" not in it:
+                raise ParserError(
+                    f"expr-if branch item missing 'N:' prefix: {it!r} at line {lineno}",
+                    loc=BlockLocation(lineno=lineno, col=1),
+                )
+            val_str, item = it.split(":", 1)
+            try:
+                val = int(val_str.strip())
+            except ValueError:
+                raise ParserError(
+                    f"branch value must be integer, got {val_str!r} at line {lineno}",
+                    loc=BlockLocation(lineno=lineno, col=1),
+                )
+            target = _parse_branch_item(item, lineno, next_lookup)
+            branches_list.append(Branch(value=val, target=target))
+        return If(cond=("expr", expr_str), branches=tuple(branches_list))
 
     raise ParserError(
         f"malformed 'node if' at line {lineno}: {s!r}",

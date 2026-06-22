@@ -7,7 +7,8 @@ import sys
 import pytest
 from dataclasses import is_dataclass
 
-REPO_ROOT = "/home/hedaas/桌面/Neural Engine"
+import os
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, f"{REPO_ROOT}/src")
 
 

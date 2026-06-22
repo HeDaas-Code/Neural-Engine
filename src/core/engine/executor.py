@@ -1,9 +1,10 @@
-"""v0 引擎执行器（Executor）。
+"""v0/v1 引擎执行器（Executor）。
 
 v0-issue-13 落地 GameState + Executor 骨架 + MemoryEventSink（mock sink），
 不依赖 EngineBus——通过 EventSink Protocol 抽象隔离。
 
 v0-issue-14..16 逐步实现节点调度。
+v1 (ADR-0004): _execute_if 接入 ExprDispatcher 真求值。
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ from core.engine.protocol import (
     TextEvt, PromptInputEvt, UserInputCmd,
     DecoratorEvt, LogEvt,
 )
+from core.engine.expr import ExprDispatcher, ExprError
 
 
 class EventSink(Protocol):
@@ -78,6 +80,7 @@ class Executor:
         self._entry_id = entry_id
         self.next: tuple = None  # NEXT 跳转目标
         self._deco_state: dict = {}  # v0-issue-15 修饰器状态 {name: {key: val}}
+        self._dispatcher = ExprDispatcher(self.state)
         # 跨块 ID 校验：所有 next_table target_id + NextId 目标 + if 分支目标 必须在 story
         self._validate_target_ids()
 
@@ -168,6 +171,12 @@ class Executor:
             for d in block.next_table
             if d.var_name is not None
         }
+        # bare next（var_name=None）→ NEXT 直接指向（ADR-0001 §5.1）
+        bare_decls = [d for d in block.next_table if d.var_name is None]
+        if len(bare_decls) == 1:
+            self.next = (None, bare_decls[0].target_id)
+        else:
+            self.next = None  # 多 next 或无 next → 等待竞争
 
         for node in block.body:
             if isinstance(node, Start):
@@ -182,7 +191,12 @@ class Executor:
                 self.sink.put_evt(PromptInputEvt(var=node.var))
                 cmd = self.sink.get_cmd()
                 if cmd is not None:
-                    self.state.vars[node.var] = cmd.value
+                    # 尝试 int 转换，失败则保留字符串
+                    raw = cmd.value
+                    try:
+                        self.state.vars[node.var] = int(raw)
+                    except (ValueError, TypeError):
+                        self.state.vars[node.var] = raw
                 else:
                     # 阻塞式等待——v0-issue-17 实现；本 issue 抛错
                     raise NotImplementedError(
@@ -191,8 +205,19 @@ class Executor:
                     )
                 continue
             if isinstance(node, Echo):
-                val = self.state.vars[node.var]  # KeyError if unset
-                self.sink.put_evt(TextEvt(content=val, style="narration"))
+                # ADR-0004 G4: echo 支持拼接
+                if node.parts:
+                    # 拼接模式：每个 part 如果是变量名则取值，否则当文本
+                    pieces = []
+                    for p in node.parts:
+                        if p in self.state.vars:
+                            pieces.append(str(self.state.vars[p]))
+                        else:
+                            pieces.append(p)
+                    self.sink.put_evt(TextEvt(content="".join(pieces), style="narration"))
+                else:
+                    val = self.state.vars[node.var]  # KeyError if unset
+                    self.sink.put_evt(TextEvt(content=val, style="narration"))
                 continue
             if isinstance(node, NextId):
                 self.next = (None, node.target_id)
@@ -225,24 +250,73 @@ class Executor:
             self.sink.put_evt(DecoratorEvt(name=deco.name, args=[deco.key]))
 
     def _execute_if(self, if_node: If) -> None:
-        """v0-issue-16: node if 打桩——永远选第一分支。"""
-        chosen = if_node.branches[0]
+        """v1 (ADR-0004): node if 真求值。
+
+        cond[0] == "var": 值匹配——取 state.vars[cond[1]] 的值，匹配 branch.value
+        cond[0] == "expr": Python 表达式——dispatcher.eval_bool 求值，
+                          True → branches[0], False → branches[1] (二元)
+                          多元分支按值匹配
+        """
+        kind, expr = if_node.cond
+        chosen = None
+
+        if kind == "expr":
+            # Python 表达式求值
+            try:
+                result = self._dispatcher.eval(expr)
+            except ExprError as e:
+                self.sink.put_evt(LogEvt(
+                    level="error",
+                    message=f"node if expr failed: {e}",
+                ))
+                raise
+            # 二元: True → branches[0], False → branches[1]
+            if len(if_node.branches) == 2:
+                chosen = if_node.branches[0] if result else if_node.branches[1]
+            else:
+                # 多元: result 当值匹配
+                for b in if_node.branches:
+                    if b.value == result:
+                        chosen = b
+                        break
+                if chosen is None:
+                    raise RuntimeError(
+                        f"node if: no branch matched value {result!r}"
+                    )
+        else:
+            # "var" 值匹配（v0 兼容）
+            var_name = expr
+            val = self.state.vars.get(var_name)
+            # 尝试 int 匹配
+            try:
+                val_int = int(val)
+            except (ValueError, TypeError):
+                val_int = val
+            for b in if_node.branches:
+                if b.value == val_int:
+                    chosen = b
+                    break
+            if chosen is None:
+                raise RuntimeError(
+                    f"node if: no branch matched value {val!r} for var {var_name!r}"
+                )
+
         self.sink.put_evt(LogEvt(
             level="info",
-            message=f"node if stubbed: chose branch {chosen.value}",
+            message=f"node if: chose branch {chosen.value}",
         ))
         # 解析分支目标
         target = chosen.target
         if isinstance(target, NextDecl):
             self.next = (target.var_name, target.target_id)
         elif isinstance(target, CallExpression):
-            # echo / in 模拟：广播对应事件；v0 打桩不跳（self.next 不变）
+            # echo / in：广播对应事件
             if target.kind == "echo":
                 val = self.state.vars.get(target.var, "")
                 self.sink.put_evt(TextEvt(content=val, style="narration"))
             elif target.kind == "in":
-                # v0 阶段不阻塞——只广播
                 self.sink.put_evt(PromptInputEvt(var=target.var))
+            return  # 不走下面的 NextDecl/CallExpression 分支
 
     def _handle_end(self, block: Block) -> None:
         """处理 node end：NEXT 跳转 / RouteEvt / ChapterEndEvt / RuntimeError。"""

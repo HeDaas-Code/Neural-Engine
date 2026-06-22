@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = "/home/hedaas/桌面/Neural Engine"
+import os
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, f"{REPO_ROOT}/src")
 
 from core.engine.main import _load_story  # noqa: E402
