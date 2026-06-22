@@ -113,28 +113,28 @@ def test_mvp_017_full_line_comment():
 
 
 def test_mvp_011_if_binary_stub():
-    """§8 #11: node if cond[a,b] 二元条件（打桩）。"""
+    """§8 #11: node if cond[a,b] 二元条件（真求值）。"""
     rc, out, err = _run_pytest(
         "tests/core/test_executor_if.py",
-        "-q", "--no-header", "-k", "test_binary_if_stub",
+        "-q", "--no-header", "-k", "test_binary_if_expr",
     )
     assert rc == 0, f"executor_if 测试失败:\n{out}"
 
 
 def test_mvp_012_if_multi_stub():
-    """§8 #12: node if var [1:a,2:b,3:c] 多元条件（打桩）。"""
+    """§8 #12: node if var [1:a,2:b,3:c] 多元条件（真求值）。"""
     rc, out, err = _run_pytest(
         "tests/core/test_executor_if.py",
-        "-q", "--no-header", "-k", "test_multi_if_stub",
+        "-q", "--no-header", "-k", "test_multi_if_value_match",
     )
     assert rc == 0, f"executor_if 测试失败:\n{out}"
 
 
 def test_mvp_013_if_shortcut_stub():
-    """§8 #13: node [a?b:c] 简略二元（打桩）。"""
+    """§8 #13: node [a?b:c] 简略二元（真求值）。"""
     rc, out, err = _run_pytest(
         "tests/core/test_executor_if.py",
-        "-q", "--no-header", "-k", "test_shortcut_if_stub",
+        "-q", "--no-header", "-k", "test_shortcut_if_expr",
     )
     assert rc == 0, f"executor_if 测试失败:\n{out}"
 

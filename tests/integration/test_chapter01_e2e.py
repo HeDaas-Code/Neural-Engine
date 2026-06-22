@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = "/home/hedaas/桌面/Neural Engine"
+import os
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CHAPTER01 = Path(REPO_ROOT) / "chapters" / "chapter01.md"
 
 

@@ -85,7 +85,13 @@ class In:
 
 @dataclass(frozen=True, slots=True)
 class Echo:
-    var: str
+    """echo 节点：输出变量或拼接文本。
+
+    v0: var="p_mood" → 输出变量值
+    v1 (ADR-0004): parts=("p_text", "是吗?我知道了.") → 拼接输出
+    """
+    var: str = ""
+    parts: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
