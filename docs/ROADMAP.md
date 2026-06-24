@@ -98,14 +98,14 @@
 
 ## 2. 未实现 / 已知限制
 
-### 2.1 ADR-0004 偏差（已登记，owner 待审查）
+### 2.1 ADR-0004 偏差（阶段一已修复）
 
-| # | 偏差 | 影响 |
+| # | 偏差 | 影响 / 修复状态 |
 |---|---|---|
-| D1 | 不加 `bool_expr` kind，用 expr + branches 数量判断 | 无功能影响 |
-| D2 | G5 修饰器结构化参数未实现 | `@style text:[rgb:red,Px:12]` 不可用 |
-| D4 | TypeError 捕获未收窄到 NameNotDefined | simpleeval API 限制 |
-| D5 | simpleeval 版本未锁定 | pyproject.toml 仍为 `>=1.0` |
+| D1 | 不加 `bool_expr` kind，用 expr + branches 数量判断 | ✅ **已修复（2026-06-24）**：新增 BOOL_EXPR_KIND + 防御性断言 |
+| D2 | G5 修饰器结构化参数未实现 | ✅ **已修复（2026-06-24，MVP）**：interpreter 支持 `[item1,item2,...]` 顶层列表 |
+| D4 | TypeError 捕获未收窄到 NameNotDefined | ✅ **已修复（2026-06-24，路径 A）**：收窄到 InvalidExpression 子类 + 字符串过滤 fallback |
+| D5 | simpleeval 版本未锁定 | ✅ **已修复（2026-06-24）**：pyproject.toml 锁定 `simpleeval==1.0.7` |
 
 ### 2.2 设计中标注"远期"的
 

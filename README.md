@@ -8,13 +8,13 @@
 |---|---|---|
 | v0 基础版引擎 | ✅ **已闭环** | v0-issue-1~19 全部落地 |
 | v1 表达式重构 | ✅ **已闭环** | PR #66 已合并，ADR-0004 全部完成 |
-| pytest | ✅ **211/211 PASSED** | `python3 -m pytest tests/ -q` |
+| pytest | ✅ **241/244 PASSED**（3 个 POSIX-only grep 测试在 Windows 失败，非代码 bug） | `python3 -m pytest tests/ -q` |
 | §8 MVP 表 | ✅ **18/18** | `tests/test_mvp_table.py` |
-| §11 关键不变量 | ✅ **10/10** | `tests/test_invariants.py` |
+| §11 关键不变量 | ✅ **10/10（核心）** + 3 个 POSIX-only 守护（Windows 失败） | `tests/test_invariants.py` |
 | v0 端到端路径 | ✅ **in → echo → end** | `tests/integration/test_echo_path.py` |
 | v1 端到端路径 | ✅ **expr if + echo 拼接 + ←/→** | `tests/integration/test_v1_e2e.py` |
 | GitHub Issues | ✅ **全部关闭** | #1~#66 全部 closed |
-| 实现偏差登记 | v0: 4 条 · v1: 6 条 | [ADR-0002 §5](docs/adr/0002-v0-engine-implementation.md) · [ADR-0004 附录](docs/adr/0004-appendix-deviations.md) |
+| 实现偏差登记 | v0: 4 条 · v1: 6 条（**D1/D2/D4/D5 已修复 2026-06-24，剩余 D3/D6 远期**） | [ADR-0002 §5](docs/adr/0002-v0-engine-implementation.md) · [ADR-0004 附录](docs/adr/0004-appendix-deviations.md) |
 
 > v1 阶段边界：translator 砍除 + 表达式真求值 + ←/→ 箭头对齐 + echo 拼接 + executor 真分支。PyQt6 GUI 和 LLM 装饰器推迟到 v2。
 

@@ -28,12 +28,12 @@
 
 | # | 设计 | 实际实现 | 原因 | 影响 |
 |---|---|---|---|---|
-| D1 | If.cond 扩 `("bool_expr", ...)` 第三种 kind | 只保留 `("var", ...)` 和 `("expr", ...)` 两种 | 二元 if 用 `("expr", ...)` + branches 数量判断即可，不需要第三种 kind | 无功能影响，简化了类型系统 |
-| D2 | G5: 修饰器结构化参数 `@style text:[rgb:red,Px:12]` | 未实现 | 改动量大，现有 `key:val` 格式够用，远期再做 | 无阻塞，v0 fixture 仍用简单格式 |
-| D3 | F2: If.cond 类型注解扩 union | `cond: tuple[str, str]` 未改 | 两种 kind 都是 str，union 没有实际意义 | 无影响 |
-| D4 | B2: TypeError 捕获收窄到 NameNotDefined/FunctionNotDefined | 仍捕获 TypeError + InvalidExpression | simpleeval 的 API 限制——InvalidExpression 是基类，细分类型需要解析异常字符串 | 非阻塞，fallback 机制兜底 |
-| D5 | B6: simpleeval 版本锁定 | 未锁定 | pyproject.toml 仍为 `simpleeval>=1.0` | 低风险，CI 可复现 |
-| D6 | F4: @LLM-jud 装饰器框架 | 未实现（设计标为远期） | 远期目标 | 无影响 |
+| D1 | If.cond 是 `("bool_expr", ...)` 第三种 kind | ✅ **已修复（2026-06-24 阶段一）**：新增 `BOOL_EXPR_KIND` 区分二元布尔与多元素值匹配；executor 增加 `VAR_KIND`/`EXPR_KIND`/`BOOL_EXPR_KIND` 常量做防御性断言 | 原方案二元 if 用 `("expr", ...)` + branches 数量判断；改用显式 kind 后类型安全 | 类型更安全，新增 2 个单测（215/215 passed） |
+| D2 | G5: 修饰器结构化参数 `@style text:[rgb:red,Px:12]` | ✅ **已修复（2026-06-24 阶段一，MVP）**：interpreter 支持 `[item1,item2,...]` 顶层列表参数；保留 `key:val` 向后兼容 | MVP 范围：仅顶层列表，不嵌套 | 新增 4 个单测覆盖结构化参数 |
+| D3 | F2: If.cond 类型注解用 union | 未修复（owner 未拍板，保留） | 两种 kind 都是 str，union 没有实际意义 | 无影响 |
+| D4 | B2: TypeError 捕获收窄到 NameNotDefined/FunctionNotDefined | ✅ **已修复（2026-06-24 阶段一，路径 A）**：dispatcher except 收窄到 `InvalidExpression` 子类 + fallback to TypeError 字符串过滤 | simpleeval 1.x 的 `InvalidExpression` 是基类，具体子类需要按字符串过滤 | 收窄到 InvalidExpression + 3 个新单测覆盖 |
+| D5 | B6: simpleeval 版本锁定 | ✅ **已修复（2026-06-24 阶段一）**：pyproject.toml 锁定 `simpleeval==1.0.7` | baseline 实装版本 | CI 可复现；新增 2 个测试覆盖版本约束 |
+| D6 | F4: @LLM-jud 装饰器框架 | 未修复（远期） | 远期目标 | 无影响 |
 
 ### 1.3 设计中未提及但实现中新增的
 
