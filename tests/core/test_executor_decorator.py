@@ -128,3 +128,54 @@ def test_last_wins_semantics():
     exe = Executor(story, sink)
     exe.run()
     assert exe._deco_state["style"]["bgm"] == "snow.mp3"
+
+
+# ─── D2 修法: 结构化参数 `[...]` 端到端 ─────────────────────────────────────
+
+
+class TestStructuredArgsExecutor:
+    """D2 修法: parse_decorator 支持 `[item1,item2,...]` 结构化参数,
+    executor 端到端处理: state 保留 `[...]` 原始字符串, event args 同上。
+    """
+
+    def test_结构化参数_进入_deco_state(self):
+        """`text:[rgb:red,Px:12]` 作为 value 保留在 deco_state['text']。"""
+        block = _block_with_decorators([
+            DecoratorCall(name="style", args=("text:[rgb:red,Px:12]",)),
+        ])
+        story = Story(blocks=(block,))
+        sink = MemoryEventSink()
+        exe = Executor(story, sink)
+        exe.run()
+        # state 保留结构化 value
+        assert exe._deco_state["style"]["text"] == "[rgb:red,Px:12]"
+
+    def test_结构化参数_广播_DecoratorEvt(self):
+        """DecoratorEvt.args 应原样保留 `[...]` 内容。"""
+        block = _block_with_decorators([
+            DecoratorCall(name="style", args=("text:[rgb:red,Px:12]",)),
+        ])
+        story = Story(blocks=(block,))
+        sink = MemoryEventSink()
+        exe = Executor(story, sink)
+        exe.run()
+        dec_evts = [e for e in sink.events if isinstance(e, DecoratorEvt)]
+        assert len(dec_evts) == 1
+        assert dec_evts[0].args == ["text:[rgb:red,Px:12]"]
+
+    def test_混合_结构化_加_普通_参数(self):
+        """混合: 顶层逗号分隔结构化和普通参数。"""
+        block = _block_with_decorators([
+            DecoratorCall(
+                name="style",
+                args=("text:[rgb:red,Px:12]", "vol:0.5"),
+            ),
+        ])
+        story = Story(blocks=(block,))
+        sink = MemoryEventSink()
+        exe = Executor(story, sink)
+        exe.run()
+        assert exe._deco_state["style"]["text"] == "[rgb:red,Px:12]"
+        assert exe._deco_state["style"]["vol"] == "0.5"
+        dec_evts = [e for e in sink.events if isinstance(e, DecoratorEvt)]
+        assert dec_evts[0].args == ["text:[rgb:red,Px:12]", "vol:0.5"]

@@ -680,6 +680,55 @@ def parse_if_stmt(
 _DECOR_NAME_RE = re.compile(r"^([a-z_]\w*)$")
 
 
+def _split_args_bracket_aware(s: str) -> list[str]:
+    """按顶层逗号拆分修饰器参数, 忽略方括号内的逗号。
+
+    D2 修法 (ADR-0004 G5): 支持结构化参数 `[item1,item2,...]` 语法。
+    - 顶层逗号 (depth=0) 作为参数分隔
+    - `[` 增加 depth, `]` 减少 depth
+    - depth > 0 内的逗号视为内容
+    - 最终 depth 必须为 0, 否则视为未闭合
+
+    Args:
+        s: 修饰器 args 字符串 (已 strip name)
+
+    Returns:
+        拆分后的参数列表 (已 strip, 过滤空串)
+
+    Raises:
+        ParserError: 方括号未闭合 (最终 depth != 0)
+    """
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    for ch in s:
+        if ch == "[":
+            depth += 1
+            current.append(ch)
+        elif ch == "]":
+            depth -= 1
+            if depth < 0:
+                # 多余的 ] —— 让上层 ParserError 报
+                raise ParserError(
+                    f"unmatched ']' in decorator args: {s!r}",
+                    loc=None,
+                )
+            current.append(ch)
+        elif ch == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(ch)
+    if depth != 0:
+        raise ParserError(
+            f"unclosed '[' in decorator args: {s!r}",
+            loc=None,
+        )
+    if current:
+        parts.append("".join(current))
+    return [p.strip() for p in parts if p.strip()]
+
+
 def parse_decorator(line: str, lineno: int):
     """解析 @xxx 修饰器行，返回 DecoratorCall 或 DecoratorStop。
 
@@ -691,6 +740,11 @@ def parse_decorator(line: str, lineno: int):
     错误：
     - 缺名（@ 后空）→ ParserError
     - 非法名（非 snake_case）→ ParserError
+    - 方括号未闭合 → ParserError (D2 修法)
+
+    D2 修法 (ADR-0004 G5): args 支持结构化参数 `[item1,item2,...]` 语法。
+    例: `@style text:[rgb:red,Px:12]` → args=("text:[rgb:red,Px:12]",)
+    方括号内的逗号不作为顶层分隔符, 整体保留为 value 字符串。
     """
     s = line.strip()
     if not s.startswith("@"):
@@ -705,7 +759,7 @@ def parse_decorator(line: str, lineno: int):
             loc=BlockLocation(lineno=lineno, col=1),
         )
 
-    # 拆 name + rest tokens（按空白切分，args 按逗号）
+    # 拆 name + rest tokens（按空白切分，args 按括号感知逗号）
     parts = rest.split(None, 1)
     name = parts[0]
     args_str = parts[1] if len(parts) > 1 else ""
@@ -716,11 +770,21 @@ def parse_decorator(line: str, lineno: int):
             loc=BlockLocation(lineno=lineno, col=1),
         )
 
-    # 拆 args（按逗号 + 可选空格）
+    # 拆 args（D2: 括号感知 — 方括号内逗号不切）
     if args_str.strip() == "":
         return DecoratorStop(name=name, key="")
 
-    args = tuple(a.strip() for a in args_str.split(",") if a.strip())
+    try:
+        args = tuple(_split_args_bracket_aware(args_str))
+    except ParserError:
+        # 给 ParserError 加上 lineno 信息
+        raise ParserError(
+            f"malformed decorator args: {args_str!r} at line {lineno}",
+            loc=BlockLocation(lineno=lineno, col=1),
+        )
+
+    if not args:
+        return DecoratorStop(name=name, key="")
 
     # 判定 call vs stop
     all_bare = all(":" not in a for a in args)
