@@ -303,6 +303,7 @@ class Executor:
                     )
         else:
             # VAR_KIND 值匹配 (v0 兼容)
+            assert kind == VAR_KIND, f"unknown if cond kind: {kind!r}"
             var_name = expr
             val = self.state.vars.get(var_name)
             # 尝试 int 匹配
