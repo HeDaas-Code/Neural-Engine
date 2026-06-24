@@ -2,7 +2,8 @@
 
 调度链:
 1. simpleeval.SimpleEval.eval(expr) 求值
-2. 失败 (TypeError / InvalidExpression) → CustomExecutor.eval_fallback 接管
+2. 失败 (TypeError / NameNotDefined / FunctionNotDefined / OperatorNotDefined)
+   → CustomExecutor.eval_fallback 接管
 3. 兜底失败 → ExprError
 
 公开 API:
@@ -13,11 +14,18 @@
 用法:
     dispatcher = ExprDispatcher(game_state, custom=custom)
     chosen_branch = dispatcher.eval_bool("tall >= 18")  # bool
+
+D4 修法 (ADR-0004 B2): 第一层 except 不再捕获通用 InvalidExpression 基类,
+改为白名单三个具体子类 — 防止简单 eval 基类未来增加新子类时被静默吞掉。
 """
 from __future__ import annotations
 
 from simpleeval import SimpleEval
-from simpleeval import InvalidExpression
+from simpleeval import (
+    NameNotDefined,
+    FunctionNotDefined,
+    OperatorNotDefined,
+)
 
 from core.engine.expr.builtin_funcs import BUILTIN_FUNCS
 from core.engine.expr.custom import CustomExecutor
@@ -73,7 +81,8 @@ class ExprDispatcher:
 
         调度链:
         1. simpleeval.eval(expr) → 返回值
-        2. TypeError / InvalidExpression → custom.eval_fallback(expr, vars)
+        2. TypeError / NameNotDefined / FunctionNotDefined / OperatorNotDefined
+           → custom.eval_fallback(expr, vars) (剧情自定义函数未注册也走 fallback)
         3. 都失败 → ExprError
 
         Args:
@@ -90,9 +99,10 @@ class ExprDispatcher:
         self._evaluator.names = self.state.vars if hasattr(self.state, "vars") else {}
         try:
             return self._evaluator.eval(expr)
-        except (TypeError, InvalidExpression) as e:
+        except (TypeError, NameNotDefined, FunctionNotDefined, OperatorNotDefined) as e:
             # TypeError: simpleeval 遇不支持的 AST 节点
-            # InvalidExpression: FunctionNotDefined / NameNotDefined / OperatorNotDefined
+            # NameNotDefined / FunctionNotDefined / OperatorNotDefined:
+            #   simpleeval 在 names/funcs/operators 白名单外时的具体异常子类
             #   (剧情自定义函数未注册也走 fallback, 让 CustomExecutor 接管)
             try:
                 return self.custom.eval_fallback(
@@ -106,7 +116,8 @@ class ExprDispatcher:
                     f"(simpleeval: {e})"
                 ) from e
         except Exception as e:
-            # 其他错误 (ZeroDivisionError / ValueError / SyntaxError / NameError...) 直接包装
+            # 兜底: 其它错误 (ZeroDivisionError / ValueError / SyntaxError /
+            # NameError / 通用 InvalidExpression 或其未来新增的子类) 直接包装
             raise ExprError(
                 f"expression evaluation failed: {expr!r} ({type(e).__name__}: {e})"
             ) from e
