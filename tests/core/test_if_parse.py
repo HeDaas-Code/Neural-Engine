@@ -66,7 +66,8 @@ def test_multi_if_with_in_branch():
 def test_bare_shortcut_binary_if():
     line = "node [a?b:c]\n"
     if_node = parse_if_stmt(line, lineno=10, next_table=_next_table())
-    assert if_node.cond == ("expr", "a")
+    # D1 修法: 简略二元 = bool 求值, 用 bool_expr kind
+    assert if_node.cond == ("bool_expr", "a")
     assert len(if_node.branches) == 2
     assert if_node.branches[0].value == 0
     assert if_node.branches[0].target == NextDecl(var_name="b", target_id="cb", lineno=2)
@@ -107,5 +108,69 @@ def test_malformed_multi_if_missing_brackets_raises():
 def test_shortcut_binary_if_constructs_expr_cond():
     line = "node [some_expr?b:c]\n"
     if_node = parse_if_stmt(line, lineno=10, next_table=_next_table())
-    assert if_node.cond[0] == "expr"
+    # D1 修法: 简略二元 = bool 求值, 用 bool_expr kind
+    assert if_node.cond[0] == "bool_expr"
     assert if_node.cond[1] == "some_expr"
+
+
+# ─── D1 修法: 二元表达式 if 用 bool_expr kind ────────────────────────────────
+
+
+class TestBoolExprKind:
+    """D1 修法 (ADR-0004): 二元表达式 if (`node if <expr> [a, b]` / 简略 `node [a?b:c]`)
+    应使用 "bool_expr" kind, 区别于多元素值匹配 ("expr" kind)。
+
+    三种 kind 区分:
+    - "var": 变量值匹配 (`node if <var_name> [a, b]` / `[1:a, 2:b]`)
+    - "expr": 表达式值匹配 (`node if <expr> [1:a, 2:b]`)
+    - "bool_expr": 表达式布尔求值 (`node if <expr> [a, b]` / `node [a?b:c]`)
+    """
+
+    def test_表达式二元_产生_bool_expr_kind(self):
+        """`node if pick == 1 [a, b]` → cond[0] == 'bool_expr' (不是 'expr')。"""
+        line = "node if pick == 1 [a,b]\n"
+        if_node = parse_if_stmt(line, lineno=10, next_table=_next_table())
+        assert if_node.cond[0] == "bool_expr"
+        assert if_node.cond[1] == "pick == 1"
+        # 行为: True → branches[0], False → branches[1]
+        assert len(if_node.branches) == 2
+        assert if_node.branches[0].value == 0
+        assert if_node.branches[1].value == 1
+
+    def test_简略二元_产生_bool_expr_kind(self):
+        """`node [a?b:c]` → cond[0] == 'bool_expr' (不是 'expr')。"""
+        line = "node [a?b:c]\n"
+        if_node = parse_if_stmt(line, lineno=10, next_table=_next_table())
+        assert if_node.cond[0] == "bool_expr"
+        assert if_node.cond[1] == "a"
+
+    def test_多元值匹配仍用_expr_kind(self):
+        """`node if pick == 1 [1:a, 2:b]` → cond[0] 仍为 'expr' (值匹配, 不是 bool 求值)。"""
+        line = "node if pick == 1 [1:a,2:b]\n"
+        if_node = parse_if_stmt(line, lineno=10, next_table=_next_table())
+        assert if_node.cond[0] == "expr", (
+            "多元素值匹配应保留 'expr' kind; 'bool_expr' 只用于二元形式"
+        )
+        assert if_node.cond[1] == "pick == 1"
+        assert len(if_node.branches) == 2
+
+    def test_变量二元仍用_var_kind(self):
+        """`node if cond[a, b]` → cond[0] 仍为 'var' (无回归)。"""
+        line = "node if cond[a,b]\n"
+        if_node = parse_if_stmt(line, lineno=10, next_table=_next_table())
+        assert if_node.cond[0] == "var"
+        assert if_node.cond[1] == "cond"
+
+    def test_变量多元仍用_var_kind(self):
+        """`node if cond [1:a, 2:b]` → cond[0] 仍为 'var' (无回归)。"""
+        line = "node if cond [1:a,2:b]\n"
+        if_node = parse_if_stmt(line, lineno=10, next_table=_next_table())
+        assert if_node.cond[0] == "var"
+        assert if_node.cond[1] == "cond"
+
+    def test_复合布尔表达式_产生_bool_expr_kind(self):
+        """含 `and` / `or` 的复合布尔表达式 → 仍是 bool_expr。"""
+        line = "node if tall >= 18 and age > 20 [a,b]\n"
+        if_node = parse_if_stmt(line, lineno=10, next_table=_next_table())
+        assert if_node.cond[0] == "bool_expr"
+        assert if_node.cond[1] == "tall >= 18 and age > 20"

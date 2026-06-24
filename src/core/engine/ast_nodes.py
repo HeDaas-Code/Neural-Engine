@@ -114,8 +114,23 @@ class Branch:
 
 @dataclass(frozen=True, slots=True)
 class If:
-    cond: tuple[str, str]  # (kind, name)：kind="var"|"expr"
+    """v0/v1 node if 节点。
+
+    cond: (kind, expr_str) 二元组
+        - VAR_KIND       ("var", "<name>"): 变量值匹配, 适用于 `node if cond [a, b]` 和 `node if cond [1:a, 2:b]`
+        - EXPR_KIND      ("expr", "<expr>"): 表达式值匹配, 适用于 `node if <expr> [1:a, 2:b]`
+        - BOOL_EXPR_KIND ("bool_expr", "<expr>"): 表达式布尔求值, 适用于
+                                `node if <expr> [a, b]` (二元) 和 `node [a?b:c]` (简略二元)
+    branches: (Branch, ...) 二元组
+    """
+    cond: tuple[str, str]
     branches: tuple[Branch, ...]
+
+
+# If.cond kind 常量 (D1 修法: 显式定义, 避免硬编码)
+VAR_KIND = "var"
+EXPR_KIND = "expr"
+BOOL_EXPR_KIND = "bool_expr"
 
 
 @dataclass(frozen=True, slots=True)

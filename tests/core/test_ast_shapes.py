@@ -155,3 +155,34 @@ def test_parser_error_carries_location():
     # loc 可选
     err2 = ParserError("no loc")
     assert err2.loc is None
+
+
+# ─── D1 修法: BOOL_EXPR_KIND 常量 ────────────────────────────────────────────
+
+
+def test_bool_expr_kind_constant_exists():
+    """D1 修法: ast_nodes 暴露 BOOL_EXPR_KIND 常量 (值 'bool_expr')。
+
+    业务代码可引用此常量, 避免硬编码字符串字面量。
+    """
+    from core.engine import ast_nodes as n
+
+    assert hasattr(n, "BOOL_EXPR_KIND"), (
+        "ast_nodes 应暴露 BOOL_EXPR_KIND 常量"
+    )
+    assert n.BOOL_EXPR_KIND == "bool_expr"
+
+
+def test_if_cond_accepts_bool_expr_kind():
+    """D1 修法: If.cond 接受 ('bool_expr', expr_str) 第三种 kind。"""
+    from core.engine.ast_nodes import If, Branch, NextDecl
+
+    if_node = If(
+        cond=("bool_expr", "tall >= 18"),
+        branches=(
+            Branch(value=0, target=NextDecl(var_name="a", target_id="aa")),
+            Branch(value=1, target=NextDecl(var_name="b", target_id="bb")),
+        ),
+    )
+    assert if_node.cond == ("bool_expr", "tall >= 18")
+    assert if_node.cond[0] == "bool_expr"

@@ -132,4 +132,5 @@ def test_block_body_routes_shortcut_if():
     nodes = parse_block_body(lines, start_lineno=10, block_meta=_empty_meta(), next_table=nt)
     if_node = nodes[1]
     assert isinstance(if_node, If)
-    assert if_node.cond[0] == "expr"
+    # D1 修法: 简略二元 = bool 求值, 用 bool_expr kind
+    assert if_node.cond[0] == "bool_expr"

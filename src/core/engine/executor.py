@@ -15,6 +15,7 @@ from core.engine.ast_nodes import (
     Story, Block, Start, End, IdMeta, IdEnd,
     Text, In, Echo, NextId, If, Branch, CallExpression, NextDecl,
     DecoratorCall, DecoratorStop,
+    VAR_KIND, EXPR_KIND, BOOL_EXPR_KIND,
 )
 from core.engine.protocol import (
     RouteEvt, ChapterEndEvt,
@@ -252,16 +253,33 @@ class Executor:
     def _execute_if(self, if_node: If) -> None:
         """v1 (ADR-0004): node if 真求值。
 
-        cond[0] == "var": 值匹配——取 state.vars[cond[1]] 的值，匹配 branch.value
-        cond[0] == "expr": Python 表达式——dispatcher.eval_bool 求值，
-                          True → branches[0], False → branches[1] (二元)
-                          多元分支按值匹配
+        cond[0] kind 分支:
+        - "var":      值匹配——取 state.vars[cond[1]] 的值, 匹配 branch.value
+        - "expr":     Python 表达式值匹配——dispatcher.eval(expr) 返回值匹配 branch.value
+        - "bool_expr": Python 表达式布尔求值——dispatcher.eval_bool(expr) 决定
+                       branches[0] (True) 或 branches[1] (False)
         """
         kind, expr = if_node.cond
         chosen = None
 
-        if kind == "expr":
-            # Python 表达式求值
+        if kind == BOOL_EXPR_KIND:
+            # 表达式布尔求值 (D1 修法: 显式 kind, 区别于 "expr" 的值匹配)
+            try:
+                result = self._dispatcher.eval_bool(expr)
+            except ExprError as e:
+                self.sink.put_evt(LogEvt(
+                    level="error",
+                    message=f"node if bool_expr failed: {e}",
+                ))
+                raise
+            if len(if_node.branches) != 2:
+                raise RuntimeError(
+                    f"node if bool_expr: requires exactly 2 branches, "
+                    f"got {len(if_node.branches)}"
+                )
+            chosen = if_node.branches[0] if result else if_node.branches[1]
+        elif kind == EXPR_KIND:
+            # Python 表达式求值, 值匹配 (多元素值匹配场景)
             try:
                 result = self._dispatcher.eval(expr)
             except ExprError as e:
@@ -284,7 +302,7 @@ class Executor:
                         f"node if: no branch matched value {result!r}"
                     )
         else:
-            # "var" 值匹配（v0 兼容）
+            # VAR_KIND 值匹配 (v0 兼容)
             var_name = expr
             val = self.state.vars.get(var_name)
             # 尝试 int 匹配

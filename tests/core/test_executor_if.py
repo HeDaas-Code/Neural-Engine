@@ -276,3 +276,130 @@ def test_constructor_validates_if_branch_target_id():
     sink = MemoryEventSink()
     with pytest.raises(ValueError):
         Executor(story, sink)
+
+
+# ─── D1 修法: bool_expr kind ─────────────────────────────────────────────────
+
+
+class TestBoolExprDispatch:
+    """D1 修法: Executor 应识别 'bool_expr' kind, 显式走 expr 求值 + True/False 二分。
+
+    与 'expr' kind 的区别:
+    - 'expr': 表达式求值后用结果值匹配 branch.value (多元/值匹配场景)
+    - 'bool_expr': 表达式求值后按 True/False 选 branches[0]/branches[1] (二元场景)
+    """
+
+    def _build_story(self, if_node, with_next_table=True):
+        """helper: 构造含 if_node 的最小 story, 含 ca / cb 两个目标块。"""
+        block_a = Block(
+            meta=(IdMeta(id="ca", lineno=10), IdEnd(x=0, route_chapter=None, lineno=11)),
+            next_table=(),
+            body=(Start(), End()),
+            loc=_loc(10),
+        )
+        block_b = Block(
+            meta=(IdMeta(id="cb", lineno=12), IdEnd(x=0, route_chapter=None, lineno=13)),
+            next_table=(),
+            body=(Start(), End()),
+            loc=_loc(12),
+        )
+        next_table = ()
+        if with_next_table:
+            next_table = (
+                NextDecl(var_name="a", target_id="ca", lineno=2),
+                NextDecl(var_name="b", target_id="cb", lineno=3),
+            )
+        block = Block(
+            meta=(IdMeta(id="start", lineno=1), IdEnd(x=0, route_chapter=None, lineno=2)),
+            next_table=next_table,
+            body=(Start(), if_node, End()),
+            loc=_loc(),
+        )
+        return Story(blocks=(block, block_a, block_b))
+
+    def test_bool_expr_kind_True_走_branches_0(self):
+        """bool_expr kind 求值为 True → branches[0]。"""
+        if_node = If(
+            cond=("bool_expr", "cond == 1"),
+            branches=(
+                Branch(value=0, target=NextDecl(var_name="a", target_id="ca", lineno=3)),
+                Branch(value=1, target=NextDecl(var_name="b", target_id="cb", lineno=4)),
+            ),
+        )
+        story = self._build_story(if_node)
+        sink = MemoryEventSink()
+        exe = Executor(story, sink)
+        exe.state.vars["cond"] = 1
+        exe.run()
+        log_evts = [e for e in sink.events if isinstance(e, LogEvt)]
+        assert "chose branch 0" in log_evts[0].message
+
+    def test_bool_expr_kind_False_走_branches_1(self):
+        """bool_expr kind 求值为 False → branches[1]。"""
+        if_node = If(
+            cond=("bool_expr", "cond == 1"),
+            branches=(
+                Branch(value=0, target=NextDecl(var_name="a", target_id="ca", lineno=3)),
+                Branch(value=1, target=NextDecl(var_name="b", target_id="cb", lineno=4)),
+            ),
+        )
+        story = self._build_story(if_node)
+        sink = MemoryEventSink()
+        exe = Executor(story, sink)
+        exe.state.vars["cond"] = 0
+        exe.run()
+        log_evts = [e for e in sink.events if isinstance(e, LogEvt)]
+        assert "chose branch 1" in log_evts[0].message
+
+    def test_bool_expr_kind_复杂表达式_True(self):
+        """bool_expr kind 复合 and/or 表达式。"""
+        if_node = If(
+            cond=("bool_expr", "tall >= 18 and age > 20"),
+            branches=(
+                Branch(value=0, target=NextDecl(var_name="a", target_id="ca", lineno=3)),
+                Branch(value=1, target=NextDecl(var_name="b", target_id="cb", lineno=4)),
+            ),
+        )
+        story = self._build_story(if_node)
+        sink = MemoryEventSink()
+        exe = Executor(story, sink)
+        exe.state.vars["tall"] = 180
+        exe.state.vars["age"] = 25
+        exe.run()
+        log_evts = [e for e in sink.events if isinstance(e, LogEvt)]
+        assert "chose branch 0" in log_evts[0].message
+
+    def test_bool_expr_kind_复杂表达式_False(self):
+        """bool_expr kind 复合 and/or 表达式 — 第二个条件不满足。"""
+        if_node = If(
+            cond=("bool_expr", "tall >= 18 and age > 20"),
+            branches=(
+                Branch(value=0, target=NextDecl(var_name="a", target_id="ca", lineno=3)),
+                Branch(value=1, target=NextDecl(var_name="b", target_id="cb", lineno=4)),
+            ),
+        )
+        story = self._build_story(if_node)
+        sink = MemoryEventSink()
+        exe = Executor(story, sink)
+        exe.state.vars["tall"] = 180
+        exe.state.vars["age"] = 15
+        exe.run()
+        log_evts = [e for e in sink.events if isinstance(e, LogEvt)]
+        assert "chose branch 1" in log_evts[0].message
+
+    def test_expr_kind_多元值匹配_不受_bool_expr_影响(self):
+        """回归: 'expr' kind 仍按值匹配 (不被 D1 改动影响)。"""
+        if_node = If(
+            cond=("expr", "pick == 1"),
+            branches=(
+                Branch(value=1, target=NextDecl(var_name="a", target_id="ca", lineno=3)),
+                Branch(value=2, target=NextDecl(var_name="b", target_id="cb", lineno=4)),
+            ),
+        )
+        story = self._build_story(if_node)
+        sink = MemoryEventSink()
+        exe = Executor(story, sink)
+        exe.state.vars["pick"] = 2  # 表达式返回 2, 应匹配 branch 2
+        exe.run()
+        log_evts = [e for e in sink.events if isinstance(e, LogEvt)]
+        assert "chose branch 2" in log_evts[0].message

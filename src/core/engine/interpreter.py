@@ -27,6 +27,7 @@ from core.engine.ast_nodes import (
     Start, End, Text, In, Echo, NextId,
     If, Branch, CallExpression,
     DecoratorCall, DecoratorStop,
+    VAR_KIND, EXPR_KIND, BOOL_EXPR_KIND,
 )
 
 
@@ -579,7 +580,7 @@ def parse_if_stmt(
     if m and not s.startswith("node if"):
         a_expr, b, c = m.group(1).strip(), m.group(2), m.group(3)
         return If(
-            cond=("expr", a_expr),
+            cond=(BOOL_EXPR_KIND, a_expr),
             branches=(
                 Branch(value=0, target=_lookup(b)),
                 Branch(value=1, target=_lookup(c)),
@@ -591,7 +592,7 @@ def parse_if_stmt(
     if m:
         cond_name, a, b = m.group(1), m.group(2), m.group(3)
         return If(
-            cond=("var", cond_name),
+            cond=(VAR_KIND, cond_name),
             branches=(
                 Branch(value=0, target=_lookup(a)),
                 Branch(value=1, target=_lookup(b)),
@@ -599,11 +600,12 @@ def parse_if_stmt(
         )
 
     # ADR-0004: 表达式二元 node if <expr> [a, b] (True→a, False→b)
+    # D1 修法: 用 BOOL_EXPR_KIND 显式表达布尔求值语义
     m = _EXPR_BINARY_IF_RE.match(s)
     if m:
         expr_str, a, b = m.group(1).strip(), m.group(2), m.group(3)
         return If(
-            cond=("expr", expr_str),
+            cond=(BOOL_EXPR_KIND, expr_str),
             branches=(
                 Branch(value=0, target=_lookup(a)),
                 Branch(value=1, target=_lookup(b)),
@@ -638,7 +640,7 @@ def parse_if_stmt(
                 )
             target = _parse_branch_item(item, lineno, next_lookup)
             branches_list.append(Branch(value=val, target=target))
-        return If(cond=("var", var_name), branches=tuple(branches_list))
+        return If(cond=(VAR_KIND, var_name), branches=tuple(branches_list))
 
     # ADR-0004: 表达式条件 node if <expr> [...]
     # 捕获所有 node if 后面不是单个 \w+ 的情况（如 pick == 1, tall >= 18 and age > 20）
@@ -664,7 +666,7 @@ def parse_if_stmt(
                 )
             target = _parse_branch_item(item, lineno, next_lookup)
             branches_list.append(Branch(value=val, target=target))
-        return If(cond=("expr", expr_str), branches=tuple(branches_list))
+        return If(cond=(EXPR_KIND, expr_str), branches=tuple(branches_list))
 
     raise ParserError(
         f"malformed 'node if' at line {lineno}: {s!r}",
