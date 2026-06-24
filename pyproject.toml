@@ -10,7 +10,15 @@ requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }
 dependencies = [
-    "simpleeval>=1.0",  # v1-issue-1 表达式求值器 (ADR-0003 §1 决策 1)
+    # D5 修法 (ADR-0004 B6): 锁定到具体版本, 防止 simpleeval 升级破坏沙箱契约
+    # simpleeval 1.0.x 版本谱 (调研于 2026-06-24, 来源: PyPI + GitHub releases):
+    #   1.0.0 (2024-10-05): 稳定版 - 沙箱逃逸修复 + dict comprehension + 自定义异常
+    #   1.0.1/1.0.2 (2024-10): packaging 调整
+    #   1.0.3 (2024-11-02): Python 3.14 支持
+    #   1.0.5 (2026-03-13): 安全修复 CVE-2026-32640 (模块不再直接可访问, BREAKING)
+    #   1.0.6 (2026-03-13): 1.0.5 引发的 unhashable kwargs bugfix
+    #   1.0.7 (2026-03-16): 1.0.5/1.0.6 性能回退修复 — 选为 pin 版本
+    "simpleeval==1.0.7",
 ]
 
 [project.optional-dependencies]

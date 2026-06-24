@@ -186,3 +186,93 @@ def test_if_cond_accepts_bool_expr_kind():
     )
     assert if_node.cond == ("bool_expr", "tall >= 18")
     assert if_node.cond[0] == "bool_expr"
+
+
+# ─── D5 修法: simpleeval 版本锁定 ────────────────────────────────────────────
+
+
+def test_simpleeval_version_pinned_exact():
+    """D5 修法: pyproject.toml 中 simpleeval 必须精确锁定到具体版本 (==X.Y.Z)。
+
+    调研结果 (simpleeval PyPI + GitHub releases 2026-06-24):
+    - 0.9.13: 最后 0.9.x
+    - 1.0.0 (2024-10-05): 稳定版 - 沙箱逃逸修复, 字典推导支持, 自定义异常
+    - 1.0.5 (2026-03-13): 安全修复 CVE-2026-32640 (BREAKING: 模块不再直接可访问)
+    - 1.0.7 (2026-03-16): 最新, 1.0.5/1.0.6 安全修复的性能回退修复
+
+    当前选用 1.0.7 (最新稳定, 含安全修复 + 性能修复)。
+    """
+    import re
+    from pathlib import Path
+
+    pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    content = pyproject.read_text(encoding="utf-8")
+
+    # 找 dependencies 段中的 simpleeval 行 (双引号包裹的依赖字符串)
+    # 模式: "..." 简单字符串, 内含 simpleeval==X.Y.Z
+    m = re.search(r'"simpleeval\s*([^\s"#]+)"', content)
+    assert m, (
+        "pyproject.toml 应在 dependencies 列表中包含 "
+        '"simpleeval<spec>" 形式的依赖声明'
+    )
+    spec = m.group(1).strip()
+
+    # 应为精确锁定 (==X.Y.Z 形式)
+    assert spec.startswith("=="), (
+        f"D5 修法: simpleeval 应精确锁定 (==X.Y.Z), 当前: {spec!r}"
+    )
+    version = spec[2:]
+    # 版本号格式: X.Y.Z (semver 简化)
+    assert re.match(r"^\d+\.\d+\.\d+$", version), (
+        f"版本号应符合 X.Y.Z 格式, 当前: {version!r}"
+    )
+
+
+def test_simpleeval_installed_version_matches_pin():
+    """D5 修法: 当前环境安装的 simpleeval 版本应与 pyproject.toml 锁定的版本一致。
+
+    验证: pip metadata 显示的版本 == pyproject.toml 锁定的版本。
+    """
+    import importlib.metadata as md
+    import re
+    from pathlib import Path
+
+    pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    content = pyproject.read_text(encoding="utf-8")
+    m = re.search(r'"simpleeval\s*==\s*(\d+\.\d+\.\d+)"', content)
+    assert m, "pyproject.toml 应在 dependencies 中包含 'simpleeval==X.Y.Z' 锁定"
+    pinned = m.group(1)
+
+    installed = md.version("simpleeval")
+    assert installed == pinned, (
+        f"环境安装的 simpleeval {installed!r} 与 pyproject 锁定 {pinned!r} 不一致"
+    )
+
+
+def test_simpleeval_pin_exists_in_pypi():
+    """D5 修法: 锁定的版本必须在 PyPI 上存在 (避免 pin 到不存在的版本)。
+
+    查询 PyPI JSON API, 验证锁定的版本号在 releases 列表里。
+    """
+    import json
+    import re
+    import urllib.request
+    from pathlib import Path
+
+    pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    content = pyproject.read_text(encoding="utf-8")
+    m = re.search(r'"simpleeval\s*==\s*(\d+\.\d+\.\d+)"', content)
+    assert m, "pyproject.toml 应在 dependencies 中包含 'simpleeval==X.Y.Z' 锁定"
+    pinned = m.group(1)
+
+    req = urllib.request.Request(
+        "https://pypi.org/pypi/simpleeval/json",
+        headers={"Accept": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read())
+    releases = data.get("releases", {})
+
+    assert pinned in releases, (
+        f"PyPI simpleeval 中无版本 {pinned!r} (仅可用的: {sorted(releases)[:5]}...)"
+    )
