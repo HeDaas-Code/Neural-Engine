@@ -8,11 +8,9 @@ import os
 import pathlib
 import sys
 import tempfile
-from pathlib import Path
 
 import pytest
 
-import os
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, f"{REPO_ROOT}/src")
 
