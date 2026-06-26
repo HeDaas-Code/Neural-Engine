@@ -10,8 +10,10 @@ v0-issue-3 命令 schema + v0-issue-4 事件 schema 共用本文件（按 ADR §
 v2 扩展（EP-11 · 存档/读档）：
 - `SaveCmd(slot)` —— 触发 SaveManager.save(slot, state)
 - `LoadCmd(slot)` —— 触发 SaveManager.load(slot) 恢复 GameState
+- `SaveAckEvt(slot, ok, [error])` —— 存档结果回执
+- `LoadAckEvt(slot, ok, [error])` —— 读档结果回执
 - 注册到 `_CMD_REGISTRY["save"]` / `_CMD_REGISTRY["load"]`，parse_cmd 自动分发
-- v3+ 落地：V2-07 任务接管 SaveManager 完整实现
+- 注册到 `_EVT_REGISTRY["save_ack"]` / `_EVT_REGISTRY["load_ack"]`，parse_evt 自动分发
 
 v2 扩展（EP-06 · 修饰器事件 kind）：
 - `DecoratorEvt(kind)` 新增 `kind: Literal["call", "stop"] = "call"` 字段
@@ -295,6 +297,84 @@ class LogEvt:
         )
 
 
+# ─── v2-p0 save-load (V2-07 · EP-11)：存档/读档回执事件 ─────────────────────
+#
+# GUI 进程订阅 save_ack / load_ack → 弹"存档成功"提示 / "存档槽 X 不存在"错误。
+# 成功路径 error=None；失败路径 ok=False + error 含具体原因（slot 非法 / 文件缺失）。
+
+
+@dataclass(frozen=True, slots=True)
+class SaveAckEvt:
+    """存档回执事件（Engine → GUI）。
+
+    成功：`ok=True, error=None`
+    失败：`ok=False, error="<原因>"`（如 slot 非法 / save_manager 缺失 / OSError）
+    """
+    slot: str
+    ok: bool
+    error: str | None = None
+
+    def to_dict(self) -> dict:
+        out = {"event": "save_ack", "slot": self.slot, "ok": self.ok}
+        if self.error is not None:
+            out["error"] = self.error
+        return out
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "SaveAckEvt":
+        _check_dict(d, "SaveAckEvt")
+        slot = _require_str(d, "slot", "SaveAckEvt")
+        if "ok" not in d:
+            raise ValueError("SaveAckEvt 缺少字段 'ok'")
+        ok = d["ok"]
+        if not isinstance(ok, bool):
+            raise ValueError(
+                f"SaveAckEvt.ok 应为 bool，得到 {type(ok).__name__}"
+            )
+        error = d.get("error")
+        if error is not None and not isinstance(error, str):
+            raise ValueError(
+                f"SaveAckEvt.error 应为 str 或 None，得到 {type(error).__name__}"
+            )
+        return cls(slot=slot, ok=ok, error=error)
+
+
+@dataclass(frozen=True, slots=True)
+class LoadAckEvt:
+    """读档回执事件（Engine → GUI）。
+
+    成功：`ok=True, error=None`（state 已被替换）
+    失败：`ok=False, error="<原因>"`（如 slot 非法 / 存档不存在 / JSON 损坏 / save_manager 缺失）
+    """
+    slot: str
+    ok: bool
+    error: str | None = None
+
+    def to_dict(self) -> dict:
+        out = {"event": "load_ack", "slot": self.slot, "ok": self.ok}
+        if self.error is not None:
+            out["error"] = self.error
+        return out
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "LoadAckEvt":
+        _check_dict(d, "LoadAckEvt")
+        slot = _require_str(d, "slot", "LoadAckEvt")
+        if "ok" not in d:
+            raise ValueError("LoadAckEvt 缺少字段 'ok'")
+        ok = d["ok"]
+        if not isinstance(ok, bool):
+            raise ValueError(
+                f"LoadAckEvt.ok 应为 bool，得到 {type(ok).__name__}"
+            )
+        error = d.get("error")
+        if error is not None and not isinstance(error, str):
+            raise ValueError(
+                f"LoadAckEvt.error 应为 str 或 None，得到 {type(error).__name__}"
+            )
+        return cls(slot=slot, ok=ok, error=error)
+
+
 # ─── 工厂函数 ────────────────────────────────────────────────────────────────
 
 
@@ -305,6 +385,8 @@ _EVT_REGISTRY = {
     "route": RouteEvt,
     "chapter_end": ChapterEndEvt,
     "log": LogEvt,
+    "save_ack": SaveAckEvt,
+    "load_ack": LoadAckEvt,
 }
 
 

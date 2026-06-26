@@ -201,23 +201,23 @@ def test_executor_processes_save_cmd_emits_save_ack_evt(tmp_path):
     """Send SaveCmd via sink → Executor 调 SaveManager.save → 发 SaveAckEvt.ok=True。"""
     from core.engine.executor import Executor
     from core.engine.ast_nodes import (
-        Story, Block, IdMeta, IdEnd, Start, Text, End, NextDecl,
+        Story, Block, IdMeta, IdEnd, Start, Text, End, In,
     )
     from core.engine.protocol import SaveCmd, SaveAckEvt, UserInputCmd
     from runtime.save import SaveManager
 
     sm = SaveManager(save_dir=tmp_path)
-    # 单 In 节点 block（触发 get_cmd()）
+    # In 节点 block（触发 get_cmd() 拦截）
     block = Block(
         meta=(IdMeta(id="start", lineno=1), IdEnd(x=0, route_chapter=None, lineno=2)),
         next_table=(),
-        body=(Start(), Text(content="hi"), End()),
+        body=(Start(), In(var="p_name"), End()),
         loc=_loc(),
     )
     story = Story(blocks=(block,))
     sink = MixedCmdSink(cmds=[
         SaveCmd(slot="01"),  # 拦截为存档命令
-        UserInputCmd(value="never_used"),  # 第二个 cmd（不在 In 节点触发）
+        UserInputCmd(value="never_used"),  # 真实输入
     ])
     exe = Executor(story, sink, save_manager=sm)
     # 预填 vars 让 save 内容非空
@@ -240,7 +240,7 @@ def test_executor_processes_load_cmd_emits_load_ack_and_replaces_state(tmp_path)
     """先 save state → send LoadCmd → Executor 调 SaveManager.load → 替换 self.state。"""
     from core.engine.executor import Executor
     from core.engine.ast_nodes import (
-        Story, Block, IdMeta, IdEnd, Start, Text, End,
+        Story, Block, IdMeta, IdEnd, Start, In, End,
     )
     from core.engine.protocol import LoadCmd, LoadAckEvt, UserInputCmd
     from runtime.save import SaveManager
@@ -253,11 +253,11 @@ def test_executor_processes_load_cmd_emits_load_ack_and_replaces_state(tmp_path)
     saved_state.current_block_id = "c1"
     sm.save("restore", saved_state)
 
-    # 单 block 触发 In 节点
+    # In 节点 block 触发 get_cmd()
     block = Block(
         meta=(IdMeta(id="start", lineno=1), IdEnd(x=0, route_chapter=None, lineno=2)),
         next_table=(),
-        body=(Start(), Text(content="hi"), End()),
+        body=(Start(), In(var="p_x"), End()),
         loc=_loc(),
     )
     story = Story(blocks=(block,))
@@ -324,7 +324,7 @@ def test_executor_save_cmd_invalid_slot_emits_ack_with_error(tmp_path):
     """SaveCmd(slot="../escape") → SaveAckEvt.ok=False + error 含 ValueError 原因。"""
     from core.engine.executor import Executor
     from core.engine.ast_nodes import (
-        Story, Block, IdMeta, IdEnd, Start, Text, End,
+        Story, Block, IdMeta, IdEnd, Start, In, End,
     )
     from core.engine.protocol import SaveCmd, SaveAckEvt, UserInputCmd
     from runtime.save import SaveManager
@@ -333,7 +333,7 @@ def test_executor_save_cmd_invalid_slot_emits_ack_with_error(tmp_path):
     block = Block(
         meta=(IdMeta(id="start", lineno=1), IdEnd(x=0, route_chapter=None, lineno=2)),
         next_table=(),
-        body=(Start(), Text(content="hi"), End()),
+        body=(Start(), In(var="p_x"), End()),
         loc=_loc(),
     )
     story = Story(blocks=(block,))
@@ -360,7 +360,7 @@ def test_executor_load_cmd_nonexistent_slot_emits_ack_with_error(tmp_path):
     """LoadCmd(slot="ghost") → LoadAckEvt.ok=False + error。state 不被覆盖。"""
     from core.engine.executor import Executor
     from core.engine.ast_nodes import (
-        Story, Block, IdMeta, IdEnd, Start, Text, End,
+        Story, Block, IdMeta, IdEnd, Start, In, End,
     )
     from core.engine.protocol import LoadCmd, LoadAckEvt, UserInputCmd
     from runtime.save import SaveManager
@@ -369,7 +369,7 @@ def test_executor_load_cmd_nonexistent_slot_emits_ack_with_error(tmp_path):
     block = Block(
         meta=(IdMeta(id="start", lineno=1), IdEnd(x=0, route_chapter=None, lineno=2)),
         next_table=(),
-        body=(Start(), Text(content="hi"), End()),
+        body=(Start(), In(var="p_x"), End()),
         loc=_loc(),
     )
     story = Story(blocks=(block,))
@@ -399,14 +399,14 @@ def test_executor_without_save_manager_save_cmd_emits_error_ack():
     """Executor 没传 save_manager + SendCmd → SaveAckEvt.ok=False（不抛错）。"""
     from core.engine.executor import Executor
     from core.engine.ast_nodes import (
-        Story, Block, IdMeta, IdEnd, Start, Text, End,
+        Story, Block, IdMeta, IdEnd, Start, In, End,
     )
     from core.engine.protocol import SaveCmd, SaveAckEvt, UserInputCmd
 
     block = Block(
         meta=(IdMeta(id="start", lineno=1), IdEnd(x=0, route_chapter=None, lineno=2)),
         next_table=(),
-        body=(Start(), Text(content="hi"), End()),
+        body=(Start(), In(var="p_x"), End()),
         loc=_loc(),
     )
     story = Story(blocks=(block,))

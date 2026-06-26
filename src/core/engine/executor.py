@@ -12,6 +12,12 @@ v2-p0 save-load (V2-06 · EP-09):
     - GameState 加 `current_block_id` 字段 + `to_dict()` / `from_dict()`
     - Executor.run() 入口 / _next_block 后置更新 current_block_id
     - D2 决策：to_dict 输出 `version: 1` + `vars/path/current_block_id` 字段
+v2-p0 save-load (V2-07 · EP-11):
+    - Executor.__init__ 接受 save_manager: SaveManager | None = None
+    - Executor.run_block 处理 In 节点时拦截 SaveCmd / LoadCmd
+      （在 sink.get_cmd() 返回值上做 dispatch）
+    - SaveCmd(slot) → SaveManager.save → 发 SaveAckEvt
+    - LoadCmd(slot) → SaveManager.load → 替换 self.state → 发 LoadAckEvt
 """
 from __future__ import annotations
 
@@ -27,6 +33,7 @@ from core.engine.ast_nodes import (
 from core.engine.protocol import (
     RouteEvt, ChapterEndEvt,
     TextEvt, PromptInputEvt, UserInputCmd,
+    SaveCmd, LoadCmd, SaveAckEvt, LoadAckEvt,
     DecoratorEvt, LogEvt,
 )
 from core.engine.expr import ExprDispatcher, ExprError
@@ -167,6 +174,7 @@ class Executor:
         *,
         entry_id: str = "start",
         state: GameState | None = None,
+        save_manager = None,
     ):
         """构造 Executor。
 
@@ -177,11 +185,14 @@ class Executor:
             state: 跨章节状态共享入口。V2-04 引入：ChapterManager 跨章节跳转时
                 复用同一个 GameState 让 vars 跨章节保留。None → 新建空 GameState
                 （v0 行为，向后兼容）。
+            save_manager: v2-p0 save-load (V2-07) 引入：SaveManager 实例。
+                None → 收到 SaveCmd/LoadCmd 时发 `ok=False` ack 事件（不抛错）。
         """
         self.story = story
         self.sink = sink
         # v2-p0 chapter-manager 扩展：state 可选外部注入，实现跨章节状态共享
         self.state = state if state is not None else GameState()
+        self.save_manager = save_manager  # v2-p0 save-load：可选 SaveManager
         self._entry_id = entry_id
         self.next: tuple = None  # NEXT 跳转目标
         self._deco_state: dict = {}  # v0-issue-15 修饰器状态 {name: {key: val}}
@@ -309,7 +320,7 @@ class Executor:
                 continue
             if isinstance(node, In):
                 self.sink.put_evt(PromptInputEvt(var=node.var))
-                cmd = self.sink.get_cmd()
+                cmd = self._get_cmd_with_save_load_intercept()
                 if cmd is not None:
                     # 尝试 int 转换，失败则保留字符串
                     raw = cmd.value
@@ -368,6 +379,89 @@ class Executor:
             if deco.name in self._deco_state:
                 self._deco_state[deco.name].pop(deco.key, None)
             self.sink.put_evt(DecoratorEvt(name=deco.name, args=[deco.key]))
+
+    # ─── v2-p0 save-load (V2-07)：SaveCmd / LoadCmd 拦截 ──────────────────
+    #
+    # 在 In 节点的 `sink.get_cmd()` 返回值上做 dispatch：
+    # - SaveCmd/LoadCmd → 调 SaveManager → 发 SaveAckEvt/LoadAckEvt → 继续 get_cmd()
+    # - 其他（含 UserInputCmd）→ 返回给 In handler 消费
+    #
+    # 设计动机：GUI 进程可能在玩家输入框聚焦时同时按 F5（存档），把 SaveCmd
+    # 推到 cmd_q 前端；Executor 在 In 节点 get_cmd() 时看到 SaveCmd，
+    # 处理后再回到 get_cmd() 拿真正输入。
+
+    def _get_cmd_with_save_load_intercept(self):
+        """从 sink.get_cmd() 取 cmd；遇 SaveCmd/LoadCmd 拦截处理后继续取。
+
+        Returns:
+            UserInputCmd 或其他可消费 cmd（含 None 表示无输入）。
+            注意：本方法**永远不返回** SaveCmd/LoadCmd —— 都被内部处理。
+        """
+        while True:
+            cmd = self.sink.get_cmd()
+            if cmd is None:
+                return None
+            if isinstance(cmd, SaveCmd):
+                self._handle_save_cmd(cmd)
+                continue
+            if isinstance(cmd, LoadCmd):
+                self._handle_load_cmd(cmd)
+                continue
+            return cmd
+
+    def _handle_save_cmd(self, cmd: "SaveCmd") -> None:
+        """处理 SaveCmd：SaveManager.save → 发 SaveAckEvt。"""
+        if self.save_manager is None:
+            self.sink.put_evt(SaveAckEvt(
+                slot=cmd.slot,
+                ok=False,
+                error="no save_manager configured",
+            ))
+            return
+        try:
+            self.save_manager.save(cmd.slot, self.state)
+        except Exception as e:  # ValueError / OSError / TypeError 都接住
+            self.sink.put_evt(SaveAckEvt(
+                slot=cmd.slot,
+                ok=False,
+                error=f"{type(e).__name__}: {e}",
+            ))
+            return
+        self.sink.put_evt(SaveAckEvt(slot=cmd.slot, ok=True))
+
+    def _handle_load_cmd(self, cmd: "LoadCmd") -> None:
+        """处理 LoadCmd：SaveManager.load → 替换 self.state → 发 LoadAckEvt。
+
+        失败时不替换 state（保留原 GameState 实例以防 caller 引用悬空）。
+        """
+        if self.save_manager is None:
+            self.sink.put_evt(LoadAckEvt(
+                slot=cmd.slot,
+                ok=False,
+                error="no save_manager configured",
+            ))
+            return
+        try:
+            loaded_state = self.save_manager.load(cmd.slot)
+        except FileNotFoundError as e:
+            self.sink.put_evt(LoadAckEvt(
+                slot=cmd.slot,
+                ok=False,
+                error=f"FileNotFoundError: {e}",
+            ))
+            return
+        except Exception as e:  # ValueError / JSONDecodeError / KeyError 都接住
+            self.sink.put_evt(LoadAckEvt(
+                slot=cmd.slot,
+                ok=False,
+                error=f"{type(e).__name__}: {e}",
+            ))
+            return
+        # 成功：替换 self.state（清空 next_table 因为跨章节）
+        self.state = loaded_state
+        # 重新初始化 dispatcher 引用新 state（v1 表达式求值用）
+        self._dispatcher = ExprDispatcher(self.state)
+        self.sink.put_evt(LoadAckEvt(slot=cmd.slot, ok=True))
 
     def _execute_if(self, if_node: If) -> None:
         """v1 (ADR-0004): node if 真求值。
