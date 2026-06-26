@@ -47,9 +47,16 @@ def main(bus=None) -> int:
     Returns:
         进程退出码（0 = 正常退出）。
 
-    分发逻辑：
-    - PyQt6 全栈就绪 → `runtime.gui.pyqt6_main.main(bus)`
-    - 其他情况 → v0 CLI 占位主循环
+    分发逻辑（D3 决策 · V2-01 扩展）：
+    - PyQt6 spec 在 + `pyqt6_main` 能 import + PyQt6 真可用
+      → `runtime.gui.pyqt6_main.main(bus)`
+    - PyQt6 spec 在但 PyQt6 实际不可用（import 失败）→ 降级 CLI（D3 决策 · V2-01 扩展）
+    - PyQt6 spec 不在 / `pyqt6_main` 不可 import → v0 CLI 占位主循环
+
+    v2-p0 扩展（EP-05 → V2-01 衔接）：
+    - PyQt6 分支的调用用 try/except RuntimeError 包裹——
+      `pyqt6_main._import_pyqt6()` 失败时 raise RuntimeError，降级 CLI 不报错。
+    - 这保护了"PyQt6 spec 在但实际不可用"的环境（如部分构建/CI）。
     """
     if bus is None:
         from core.engine.bus import EngineBus
@@ -57,8 +64,12 @@ def main(bus=None) -> int:
 
     if _has_pyqt6_main():
         # 延迟 import：避免 PyQt6 import 失败时污染 CLI 路径
-        from runtime.gui.pyqt6_main import main as _pyqt_main
-        return _pyqt_main(bus)
+        try:
+            from runtime.gui.pyqt6_main import main as _pyqt_main
+            return _pyqt_main(bus)
+        except RuntimeError:
+            # V2-01 扩展：PyQt6 spec 在但实际不可用 → 降级 CLI（D3 决策）
+            pass
 
     return _cli_main(bus)
 
