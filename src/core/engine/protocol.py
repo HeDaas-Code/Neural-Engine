@@ -21,6 +21,11 @@ v2 扩展（EP-06 · 修饰器事件 kind）：
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
+
+
+_DECORATOR_KIND = Literal["call", "stop"]
+_DECORATOR_KIND_ALLOWED = ("call", "stop")
 
 
 def _check_dict(d: dict, name: str) -> None:
@@ -200,22 +205,52 @@ class PromptInputEvt:
 
 @dataclass(frozen=True, slots=True)
 class DecoratorEvt:
+    """修饰器事件（Engine → GUI，EP-06 扩展 kind 字段）。
+
+    v0 字段：name + args（按修饰器定义触发，如 `style bgm:rain.mp3`）。
+    v2 字段（EP-06）：kind ∈ {"call", "stop"}
+        - "call"（默认）：触发 / 播放该修饰器（如 bgm 播放、bg 切换）
+        - "stop"：停止 / 暂停该修饰器（如 bgm 停止）
+
+    向后兼容（EP-06）：
+    - to_dict 总是输出 kind（显式优于隐式）
+    - from_dict 缺 kind 时默认 "call"（老 v0 dict 仍能 parse）
+    - from_dict kind 非合法字面量抛 ValueError（防静默错配）
+
+    v3+ 用途：
+    - AudioManager 监听 name="bgm" → play(args[0]) / stop()
+    - VideoPlayer 监听 name="video" → play(args[0])
+    """
     name: str
     args: list[str]
+    kind: _DECORATOR_KIND = "call"
 
     def to_dict(self) -> dict:
         return {
             "event": "decorator",
             "name": self.name,
             "args": list(self.args),  # 防御性拷贝
+            "kind": self.kind,
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "DecoratorEvt":
         _check_dict(d, "DecoratorEvt")
+        # kind 可选，缺时默认 "call"（EP-06 向后兼容）
+        kind_raw = d.get("kind", "call")
+        if not isinstance(kind_raw, str):
+            raise ValueError(
+                f"DecoratorEvt.kind 应为 str，得到 {type(kind_raw).__name__}"
+            )
+        if kind_raw not in _DECORATOR_KIND_ALLOWED:
+            raise ValueError(
+                f"DecoratorEvt.kind 应为 {list(_DECORATOR_KIND_ALLOWED)} 之一，"
+                f"得到 {kind_raw!r}"
+            )
         return cls(
             name=_require_str(d, "name", "DecoratorEvt"),
             args=_require_str_list(d, "args", "DecoratorEvt"),
+            kind=kind_raw,  # type: ignore[arg-type]
         )
 
 

@@ -48,13 +48,19 @@ def test_prompt_input_evt_round_trip():
     assert restored == evt
 
 
-# 4. DecoratorEvt round-trip with list args
+# 4. DecoratorEvt round-trip with list args（EP-06 起 to_dict 必含 kind 字段）
 def test_decorator_evt_round_trip_with_list_args():
     from core.engine.protocol import DecoratorEvt
 
     evt = DecoratorEvt(name="style", args=["bgm:rain.mp3"])
     d = evt.to_dict()
-    assert d == {"event": "decorator", "name": "style", "args": ["bgm:rain.mp3"]}
+    # EP-06 扩展：默认 kind="call"，to_dict 必输出（显式优于隐式）
+    assert d == {
+        "event": "decorator",
+        "name": "style",
+        "args": ["bgm:rain.mp3"],
+        "kind": "call",
+    }
 
     restored = DecoratorEvt.from_dict(d)
     assert restored == evt
@@ -63,6 +69,92 @@ def test_decorator_evt_round_trip_with_list_args():
     evt2 = DecoratorEvt(name="style", args=["bgm:rain.mp3", "vol:0.5"])
     d2 = evt2.to_dict()
     assert d2["args"] == ["bgm:rain.mp3", "vol:0.5"]
+    assert d2["kind"] == "call"
+
+
+# ─── v2-skeleton · EP-06 · DecoratorEvt kind 字段（call/stop 区分） ───────────
+#
+# 设计动机：v3+ AudioManager/VideoPlayer 需要区分"触发"和"停止"两个语义。
+# v0 默认行为等价于 kind="call"，所以新增字段采用向后兼容策略：
+#   - to_dict 必含 kind（显式优于隐式）
+#   - from_dict 缺 kind 时默认 "call"（老 v0 dict 仍能 parse）
+
+
+# 4a. DecoratorEvt 默认 kind = "call"（向后兼容构造）
+def test_decorator_evt_default_kind_is_call():
+    """DecoratorEvt() 不传 kind 时默认为 'call'，与 v0 行为一致。"""
+    from core.engine.protocol import DecoratorEvt
+
+    evt = DecoratorEvt(name="style", args=["x"])
+    assert evt.kind == "call"
+
+
+# 4b. DecoratorEvt 显式 kind = "stop" 区分
+def test_decorator_evt_explicit_kind_stop():
+    """显式传 kind='stop' 用于停止语义（如 stop("bgm")）。"""
+    from core.engine.protocol import DecoratorEvt
+
+    evt = DecoratorEvt(name="bgm", args=["rain.mp3"], kind="stop")
+    d = evt.to_dict()
+    assert d == {
+        "event": "decorator",
+        "name": "bgm",
+        "args": ["rain.mp3"],
+        "kind": "stop",
+    }
+    assert DecoratorEvt.from_dict(d) == evt
+
+
+# 4c. from_dict 缺 kind 字段时默认 "call"（向后兼容关键测试）
+def test_decorator_evt_from_dict_missing_kind_defaults_to_call():
+    """v0 老 dict 无 kind 字段时，from_dict 必须用默认 'call'（EP-06 向后兼容）。"""
+    from core.engine.protocol import DecoratorEvt
+
+    # 模拟 v0 时代的 dict：无 kind 字段
+    v0_dict = {"event": "decorator", "name": "style", "args": ["bgm:rain.mp3"]}
+    evt = DecoratorEvt.from_dict(v0_dict)
+    assert evt.kind == "call"
+    assert evt.name == "style"
+    assert evt.args == ["bgm:rain.mp3"]
+
+
+# 4d. from_dict kind 字段非法值抛 ValueError
+def test_decorator_evt_from_dict_invalid_kind_raises_value_error():
+    """kind 不是 'call' / 'stop' 时必须抛 ValueError（防静默错配）。"""
+    from core.engine.protocol import DecoratorEvt
+
+    # "pause" 不在合法字面量里
+    with pytest.raises(ValueError):
+        DecoratorEvt.from_dict({
+            "event": "decorator",
+            "name": "bgm",
+            "args": ["x"],
+            "kind": "pause",
+        })
+
+    # int 也不允许
+    with pytest.raises(ValueError):
+        DecoratorEvt.from_dict({
+            "event": "decorator",
+            "name": "bgm",
+            "args": ["x"],
+            "kind": 1,
+        })
+
+
+# 4e. parse_evt 仍能分发 DecoratorEvt（带 kind）
+def test_parse_evt_dispatches_decorator_with_kind():
+    """parse_evt("decorator") 必须返回 DecoratorEvt 且 kind 字段保留。"""
+    from core.engine.protocol import DecoratorEvt, parse_evt
+
+    evt = parse_evt({
+        "event": "decorator",
+        "name": "bgm",
+        "args": ["rain.mp3"],
+        "kind": "stop",
+    })
+    assert isinstance(evt, DecoratorEvt)
+    assert evt.kind == "stop"
 
 
 # 5. DecoratorEvt args 传 tuple / set 抛 ValueError
