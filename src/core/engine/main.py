@@ -2,6 +2,9 @@
 
 v0-issue-17 范围：装配 EngineBus + 加载章节 + 命令循环 + GUI 子进程降级 headless。
 v0-issue-19 落地端到端 fixture；v0-issue-18 落地 GUI 进程。
+
+phase2 P0-S1：_load_story 加路径校验（防穿越 + 大小 + 扩展名 + symlink）。
+v2-p0 chapter-manager 任务：暴露 validate_chapter_path 给 runtime.load_chapter 复用。
 """
 from __future__ import annotations
 
@@ -24,10 +27,59 @@ from core.engine.protocol import LogEvt
 # 用于测试时替换的可观察变量
 _last_bus = None
 
+# phase2 P0-S1：章节校验常量
+# main.py 位于 src/core/engine/main.py，向上一级到仓库根（src/core/engine → src/core → src → 仓库根）
+CHAPTERS_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "chapters"
+MAX_CHAPTER_SIZE = 1_000_000  # 1MB — 防恶意 /dev/zero 类大文件触发 OOM
+
+
+def validate_chapter_path(chapter_path) -> Path:
+    """P0-S1 路径校验 4 条（顺序很重要 — 先排 symlink 防 read_text 跟随）：
+      1. 原始路径不能是符号链接（防 chapters/foo.md → /etc/shadow）
+      2. resolve 后必须位于 CHAPTERS_ROOT 下（防路径穿越 / 绝对路径越界）
+      3. 扩展名必须是 .md
+      4. 文件大小 ≤ MAX_CHAPTER_SIZE（防 OOM）
+
+    Returns:
+        校验通过 + resolve 后的绝对 Path。
+
+    Raises:
+        ValueError: 校验失败（含具体原因）。
+        FileNotFoundError: 文件不存在（由 p.stat() / p.read_text() 抛出）。
+    """
+    raw = Path(chapter_path)
+
+    # 1. 排 symlink（在 resolve 之前，避免 read_text 跟随到任意位置）
+    if raw.is_symlink():
+        raise ValueError(f"chapter must not be a symlink: {raw}")
+
+    p = raw.resolve()
+
+    # 2. 必须在 CHAPTERS_ROOT 下
+    try:
+        p.relative_to(CHAPTERS_ROOT.resolve())
+    except ValueError:
+        raise ValueError(f"chapter must be under {CHAPTERS_ROOT}: {p}")
+
+    # 3. 必须是 .md
+    if p.suffix != ".md":
+        raise ValueError(f"chapter must be .md: {p}")
+
+    # 4. 大小限制
+    if p.stat().st_size > MAX_CHAPTER_SIZE:
+        raise ValueError(f"chapter too large (>{MAX_CHAPTER_SIZE} bytes): {p}")
+
+    return p
+
 
 def _load_story(chapter_path: str):
-    """加载章节 → Story。"""
-    text = Path(chapter_path).read_text(encoding="utf-8")
+    """加载章节 → Story。
+
+    phase2 P0-S1：路径校验走 validate_chapter_path（4 条闸门）。
+    复用入口（不重写校验）：runtime/load_chapter.py 也调用 validate_chapter_path。
+    """
+    p = validate_chapter_path(chapter_path)
+    text = p.read_text(encoding="utf-8")
     blocks_text = extract_neon_blocks(text)
     blocks = []
     for nb in blocks_text:

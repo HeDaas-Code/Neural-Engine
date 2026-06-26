@@ -1,6 +1,9 @@
 """v0-issue-19 端到端：test_echo.md + MemoryInputSink。
 
 按 issue #42 acceptance criteria 验证 v0 唯一跑通路径 in→echo→end。
+
+phase2 P0-S1：tests/test_echo.md 不在 CHAPTERS_ROOT 下（默认仓库根 chapters/），
+fixture 用 monkeypatch 临时放行；chapter01.md 测试保持原样（已在 chapters/）。
 """
 import sys
 from pathlib import Path
@@ -18,8 +21,14 @@ from core.engine.protocol import (  # noqa: E402
 )
 
 
-def test_echo_path_in_echo_end():
+def test_echo_path_in_echo_end(monkeypatch):
     """最小 fixture: in -> p_tall + echo p_tall + end。"""
+    from core.engine import main as main_mod
+
+    # phase2 P0-S1：fixture 在 tests/ 下，临时把 CHAPTERS_ROOT 放宽到 tests/，让 _load_story 通过校验
+    tests_dir = Path(REPO_ROOT) / "tests"
+    monkeypatch.setattr(main_mod, "CHAPTERS_ROOT", tests_dir)
+
     chapter = Path(REPO_ROOT) / "tests" / "test_echo.md"
     story = _load_story(str(chapter))
     sink = MemoryInputSink(inputs=["雨"])
