@@ -1,8 +1,8 @@
 # Neural Engine 功能路线图
 
-> **日期**：2026-06-23
-> **作者**：哈尼斯（独立第三方审计）
-> **基线**：v1 重构完工（PR #66 已合并），211 tests passed
+> **日期**：2026-06-26
+> **作者**：哈尼斯（独立第三方审计）· tdd-coder 同步 v2 P0 状态
+> **基线**：v2 P0 三大功能完工（feature/v2-p0-gui-first 分支），423 tests passed · ruff 0 errors · 覆盖率 93%
 
 ---
 
@@ -76,23 +76,27 @@
 | multiprocessing.Queue | 双向 | ✅ |
 | queue.Queue（测试注入） | 双向 | ✅ |
 
-### 1.5 GUI（runtime/gui/main.py）
+### 1.5 GUI（runtime/gui/）
 
 | 能力 | 状态 |
 |---|---|
 | CLI 占位渲染（路径 B） | ✅ |
 | headless 降级 | ✅ |
-| PyQt6 窗口（路径 A） | ❌ 推迟到 v2 |
+| PyQt6 窗口（路径 A） | ✅ **v2 P0 已实现**（`pyqt6_main.py` + `pyqt6_sink.py` + `pyqt6_input.py`） |
+| 工厂分发（PyQt6 可用性 → CLI/PyQt6 二选一） | ✅ v2 P0（D3 决策） |
+| 装饰器钩子（@style/@bgm registry/dispatcher） | ✅ v2 P0（decorators/ 子包） |
 
-### 1.6 测试覆盖
+### 1.6 测试覆盖（v2 P0 基线）
 
 | 维度 | 数量 |
 |---|---|
-| 总测试数 | 211 |
-| 单元测试 | ~180 |
-| 端到端测试 | 3 文件（v0 echo path + v0 chapter01 + v1 e2e） |
-| 不变量守护 | 10 条（§11） |
+| 总测试数 | **423**（v1 211 → v2 423，净增 212） |
+| 单元测试 | ~280（21 个核心 + 5 个 runtime + 4 个 integration 文件） |
+| 端到端测试 | 4 文件（v0 echo path + v0 chapter01 + v1 e2e + **v2 chapter01_v1 e2e** + **v2 save_load e2e**） |
+| 不变量守护 | 10 条（§11）· 3 个 POSIX-only grep 守护需 Git Bash PATH |
 | MVP 表 | 18 条（§8） |
+| v2 P0 新增 | 装饰器钩子（17）+ PyQt6 mock（53）+ 章节管理器（12）+ 存档（69）+ 骨架（7）= **158** |
+| 覆盖率（src/） | **93%**（1472 stmts, 103 miss）|
 
 ---
 
@@ -118,10 +122,10 @@
 
 | 特性 | 说明 |
 |---|---|
-| PyQt6 GUI 窗口 | v0-issue-18 路径 A，推迟到 v2 |
-| 真实多媒体播放 | `@style bgm:rain.mp3` 只广播事件，不真播放 |
-| 章节图 DAG | 章节间路由只是广播 `RouteEvt`，无上层加载器 |
-| 存档/读档 | 无 |
+| PyQt6 GUI 窗口 | ✅ **v2 P0 已实现**（`runtime/gui/pyqt6_main.py`） |
+| 真实多媒体播放 | ⚠️ `@style bgm:rain.mp3` 只广播事件，不真播放（v3 AudioManager 接管） |
+| 章节图 DAG | ✅ **v2 P0 章节管理器已实现**（跨章节路由 `RouteEvt → load_chapter_safe → 新 Executor`，`id:endX:chapterYY` 工作）；可视化章节图推迟到 v3 |
+| 存档/读档 | ✅ **v2 P0 已实现**（`runtime/save.py` SaveManager + GameState 序列化 + `~/.neural-engine/saves/{slot}.json`） |
 | 行尾注释 | v0 只支持整行注释 |
 
 ---
@@ -278,28 +282,106 @@
 ## 4. 推荐执行顺序
 
 ```
-v2 阶段 1：核心体验闭环
+v2 阶段 1：核心体验闭环  ✅ 已完工（2026-06-26）
   ├─ 3.1 PyQt6 GUI 窗口
   ├─ 3.2 章节加载器
   └─ 3.3 存档/读档
         ↓
-v2 阶段 2：DSL 表达力
+v2 阶段 2：DSL 表达力  ← 下一步
   ├─ 3.4 修饰器结构化参数（G5 补完）
   ├─ 3.6 表达式系统增强
   └─ 3.5 变量持久化语义明确
         ↓
-v2 阶段 3：LLM 集成（可选）
+v3 阶段 3：LLM 集成（可选）
   ├─ 3.7 @LLM-jud 装饰器
   └─ 3.8 LLM NPC 对话
         ↓
-v2 阶段 4：工具链
+v3 阶段 4：工具链
   ├─ 3.9 剧情编辑器
   ├─ 3.10 章节图可视化
   └─ 3.11 测试覆盖率
 ```
 
-**建议**：先做 3.1（PyQt6）+ 3.2（章节加载器），让引擎能真正跑起来。这两个做完后，后续所有功能都能在真窗口里验证，迭代效率大幅提升。
+**v2 P0 完工状态**（2026-06-26）：3.1/3.2/3.3 全部落地，pytest 423 passed，ruff 0 errors，coverage 93%。详见 [docs/audit/v2-p0-summary.md](audit/v2-p0-summary.md)。
+
+**下一步建议**：进入 v2 阶段 2（DSL 表达力），先把 3.4 G5 修饰器结构化参数补完（已有 v1 D2 MVP 实现，需要扩到嵌套对象），再做 3.6 表达式系统增强（randint/clamp/字符串函数）。LLM 集成（v3）和工具链（编辑器/章节图）建议放到更后面，等核心体验稳定后再投入。
 
 ---
 
-*哈尼斯 · 2026-06-23*
+## 5. v3 候选方向（哈尼斯 + tdd-coder 联合建议）
+
+基于 v2 P0 完工后的代码现状，提出三个候选 v3 方向，按价值/风险比排序：
+
+### 5.1 LLM 集成（高价值 / 中风险）
+
+**目标**：让 DSL 支持 `@LLM-jud(...)` 装饰器，调用外部 LLM API 实现动态判断。
+
+**落地路径**：
+- 复用 v2 P0 装饰器钩子（`runtime/decorators/` registry/dispatcher）
+- 新增 `LLMJudDecorator` 类，注册到 dispatcher
+- LLM 调用走 asyncio + 缓存层（同输入复用结果）
+- API key 管理用环境变量 + 配置文件（不写代码）
+
+**风险**：LLM API 延迟（1-3s）会阻塞引擎循环 → 必须异步；成本（每次 LLM 调用 $）→ 必须缓存；安全（玩家可能写恶意 prompt）→ 沙箱限制 + 长度上限。
+
+**估时**：2-3 周（含 1 周 LLM API 集成 + 1 周缓存/异步 + 0.5 周测试 + 0.5 周文档）。
+
+**前置条件**：3.6 表达式系统增强完成（`LLMJudDecorator` 内部用 simpleeval 包裹 prompt 表达式）。
+
+### 5.2 剧情编辑器（中价值 / 中风险）
+
+**目标**：提供 GUI 编辑器，让剧情作者可视化编辑节点图（节点 = 块，边 = next 跳转），实时预览引擎执行。
+
+**落地路径**：
+- 复用 v2 P0 PyQt6 GUI 基础（`runtime/gui/pyqt6_main.py` + `pyqt6_sink.py`）
+- 新增 `src/editor/` 包（已有占位）：
+  - 节点图视图（QGraphicsScene + QGraphicsView）
+  - 节点编辑器（QTextEdit + neon 语法高亮）
+  - 实时预览（编辑器 → core/engine/main → 渲染）
+- 增量开发：先做节点图只读视图（基于扫描所有 `.md` 的 `id:endX:chapterYY`），再做编辑器，最后做实时预览
+
+**风险**：PyQt6 跨平台测试（Windows/macOS/Linux 渲染差异）；节点图布局算法（DAG 自动布局 vs 手调）；编辑器 undo/redo 复杂。
+
+**估时**：1-2 周（只读视图）+ 2-3 周（编辑器）+ 1 周（实时预览）= 4-6 周全量。
+
+**前置条件**：3.1 PyQt6 GUI 已完工 ✅；3.10 章节图可视化作为节点图数据源。
+
+### 5.3 章节图可视化（低价值 / 低风险）
+
+**目标**：扫描所有 `.md` 文件的 `id:endX:chapterYY`，自动生成章节间路由 DAG，用 Graphviz 渲染 PNG。
+
+**落地路径**：
+- 扫描器：`tools/chapter_graph.py` 扫描 chapters/ → 输出 `chapter_graph.dot`
+- 渲染：调用 `dot -Tpng chapter_graph.dot > chapter_graph.png`
+- 集成到 README（嵌入生成的 PNG）
+- 可选：增量构建（文件 mtime 检测）
+
+**风险**：极低（纯文本扫描 + 现成 Graphviz）；唯一限制是 Graphviz 工具链依赖（CI 装 graphviz 包）。
+
+**估时**：0.5-1 周。
+
+**前置条件**：3.2 章节加载器已完工 ✅。
+
+### 5.4 推荐顺序
+
+```
+v3 阶段 A：低风险铺底（1 周）
+  └─ 5.3 章节图可视化（作为工具链的"易摘果实"）
+
+v3 阶段 B：DSL 表达力扩展（2-3 周）  ← 衔接 v2 P2
+  ├─ 3.4 修饰器结构化参数（G5 补完）
+  ├─ 3.6 表达式系统增强
+  └─ 3.5 变量持久化语义明确
+
+v3 阶段 C：LLM 集成（2-3 周）
+  └─ 5.1 LLM 集成
+
+v3 阶段 D：工具链收尾（4-6 周，可分阶段）
+  └─ 5.2 剧情编辑器
+```
+
+**核心建议**：先用 5.3 章节图可视化作为工具链验证（投入小、收益快、暴露问题），再做 3.4/3.6 补完 DSL 表达力，最后做 5.1 LLM 集成（技术风险最高）和 5.2 剧情编辑器（投入最大）。LLM 和编辑器可按团队精力二选一，不强求都做。
+
+---
+
+*哈尼斯 · 2026-06-23（初版）· tdd-coder · 2026-06-26（v2 P0 完工 + v3 建议）*
