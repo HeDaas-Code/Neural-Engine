@@ -1,6 +1,6 @@
 # Neural Engine
 
-> 中文文字游戏引擎 · v1 表达式子系统已完工
+> 中文文字游戏引擎 · v2 P0 三大功能已完工
 
 ## 状态
 
@@ -8,15 +8,21 @@
 |---|---|---|
 | v0 基础版引擎 | ✅ **已闭环** | v0-issue-1~19 全部落地 |
 | v1 表达式重构 | ✅ **已闭环** | PR #66 已合并，ADR-0004 全部完成 |
-| pytest | ✅ **241/244 PASSED**（3 个 POSIX-only grep 测试在 Windows 失败，非代码 bug） | `python3 -m pytest tests/ -q` |
+| **v2 P0：PyQt6 GUI** | ✅ **已闭环** | `runtime/gui/pyqt6_main.py` + `pyqt6_sink.py` + `pyqt6_input.py`，53 测试 |
+| **v2 P0：章节加载器** | ✅ **已闭环** | `runtime/chapter_manager.py` + `load_chapter.py`，12 测试 |
+| **v2 P0：存档/读档** | ✅ **已闭环** | `runtime/save.py` + SaveCmd/LoadCmd/SaveAckEvt/LoadAckEvt，69 测试 |
+| pytest | ✅ **423/423 PASSED** | `python3 -m pytest tests/ -q` |
+| ruff | ✅ **0 errors** | `ruff check src/ tests/` |
+| 覆盖率 | ✅ **93%**（1472 stmts, 103 miss） | `pytest --cov=src --cov-report=term-missing` |
 | §8 MVP 表 | ✅ **18/18** | `tests/test_mvp_table.py` |
-| §11 关键不变量 | ✅ **10/10（核心）** + 3 个 POSIX-only 守护（Windows 失败） | `tests/test_invariants.py` |
+| §11 关键不变量 | ✅ **10/10（核心）** + 3 个 POSIX-only 守护（Windows 需 Git Bash PATH） | `tests/test_invariants.py` |
 | v0 端到端路径 | ✅ **in → echo → end** | `tests/integration/test_echo_path.py` |
 | v1 端到端路径 | ✅ **expr if + echo 拼接 + ←/→** | `tests/integration/test_v1_e2e.py` |
+| v2 端到端路径 | ✅ **chapter01_v1 + 存档读档** | `tests/integration/test_save_load_e2e.py` |
 | GitHub Issues | ✅ **全部关闭** | #1~#66 全部 closed |
 | 实现偏差登记 | v0: 4 条 · v1: 6 条（**D1/D2/D4/D5 已修复 2026-06-24，剩余 D3/D6 远期**） | [ADR-0002 §5](docs/adr/0002-v0-engine-implementation.md) · [ADR-0004 附录](docs/adr/0004-appendix-deviations.md) |
 
-> v1 阶段边界：translator 砍除 + 表达式真求值 + ←/→ 箭头对齐 + echo 拼接 + executor 真分支。PyQt6 GUI 和 LLM 装饰器推迟到 v2。
+> **v2 P0 完工**：PyQt6 GUI + 章节加载器 + 存档读档（2026-06-26）。详见 [docs/ROADMAP.md](docs/ROADMAP.md) §3 + [docs/audit/v2-p0-summary.md](docs/audit/v2-p0-summary.md)。下一步进入 v2 阶段 2（DSL 表达力扩展，3.4/3.6/3.5）+ v3 候选（章节图 / LLM / 编辑器）。
 
 ## 这是什么
 
@@ -55,7 +61,7 @@ python3 -m pip install -e .          # 安装包（含 simpleeval 依赖）
 
 ```bash
 python3 -m pytest tests/ -q
-# 期望：211 passed
+# 期望：423 passed（v2 P0 完工，2026-06-26）
 ```
 
 ### 跑引擎
@@ -189,6 +195,8 @@ ExprDispatcher.eval(expr)
 | v1 重构设计（对齐 neon 规范） | [ADR-0004](docs/adr/0004-v1-refactor-design.md) |
 | v1 偏差登记（6 条） | [ADR-0004 附录](docs/adr/0004-appendix-deviations.md) |
 | v1 独立审计报告 | [docs/audit/v1-independent-audit-hanice.md](docs/audit/v1-independent-audit-hanice.md) |
+| v2 独立审计报告 | [docs/audit/v2-independent-audit-pm.md](docs/audit/v2-independent-audit-pm.md) |
+| v2 P0 阶段总结 | [docs/audit/v2-p0-summary.md](docs/audit/v2-p0-summary.md) |
 | 下一步功能路线图 | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | Agent 协作约定 | [CLAUDE.md](CLAUDE.md) |
 | 多上下文域文档 | [CONTEXT-MAP.md](CONTEXT-MAP.md) |
