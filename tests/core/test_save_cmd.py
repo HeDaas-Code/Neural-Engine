@@ -38,7 +38,7 @@ class MixedCmdSink:
         return None
 
 
-def _loc() -> "BlockLocation":
+def _loc():
     from core.engine.ast_nodes import BlockLocation
     return BlockLocation(lineno=1, col=1)
 
@@ -131,11 +131,11 @@ def test_parse_evt_dispatches_save_ack_and_load_ack():
     assert s.slot == "01"
     assert s.ok is True
 
-    l = parse_evt({"event": "load_ack", "slot": "02", "ok": False, "error": "x"})
-    assert isinstance(l, LoadAckEvt)
-    assert l.slot == "02"
-    assert l.ok is False
-    assert l.error == "x"
+    load_evt = parse_evt({"event": "load_ack", "slot": "02", "ok": False, "error": "x"})
+    assert isinstance(load_evt, LoadAckEvt)
+    assert load_evt.slot == "02"
+    assert load_evt.ok is False
+    assert load_evt.error == "x"
 
 
 # ─── 7. SaveAckEvt / LoadAckEvt 缺字段抛 ValueError ──────────────────────
