@@ -39,12 +39,19 @@ def test_main_emits_log_error_for_missing_chapter(tmp_path, monkeypatch):
         def __init__(self, *a, **kw):
             from core.engine.executor import MemoryEventSink
             self._sink = MemoryEventSink()
+            self._get_idx = 0
         @property
         def events(self):
             return self._sink.events
         def put_evt(self, evt):
             self._sink.put_evt(evt)
         def get_cmd(self):
+            return None
+        def get_evt(self):
+            if self._get_idx < len(self._sink.events):
+                e = self._sink.events[self._get_idx]
+                self._get_idx += 1
+                return e
             return None
         def close(self):
             pass
@@ -81,14 +88,25 @@ def test_main_with_minimal_chapter_returns_0_headless(tmp_path, monkeypatch):
         encoding="utf-8",
     )
 
-    # 替换 EngineBus 为可观察的
+    # 替换 EngineBus 为可观察的（v2-p0：加 get_evt 让 ChapterManager 监听）
     class MemoryEngineBus:
         def __init__(self, *a, **kw):
             from core.engine.executor import MemoryEventSink
             self._sink = MemoryEventSink()
+            self._get_idx = 0
+        @property
+        def events(self):
+            return self._sink.events
         def put_evt(self, evt):
             self._sink.put_evt(evt)
         def get_cmd(self):
+            return None
+        def get_evt(self):
+            # FIFO 出队——executor put 的事件能循环到 ChapterManager
+            if self._get_idx < len(self._sink.events):
+                e = self._sink.events[self._get_idx]
+                self._get_idx += 1
+                return e
             return None
         def close(self):
             pass
@@ -99,6 +117,138 @@ def test_main_with_minimal_chapter_returns_0_headless(tmp_path, monkeypatch):
 
     rc = main_mod.main(str(chapter))
     assert rc == 0
+
+
+# 5. v2-p0 chapter-manager 集成：main() 用 ChapterManager 跑 initial story + 跨章节
+def test_main_uses_chapter_manager_for_routing_across_chapters(tmp_path, monkeypatch):
+    """main() 内部用 ChapterManager(initial_story=first_story).run() —— 验证：
+    - 第一章节走 initial_story 路径
+    - 后续跨章节由 ChapterManager.run() 监听 RouteEvt 处理
+    - chapter01 末尾 id:end1:chapter02 触发 RouteEvt('chapter02') → 加载 chapter02
+    - chapter02 末尾 id:end2 触发 ChapterEndEvt → ChapterManager.run() 退出 → main() 返回 0
+    """
+    from core.engine import main as main_mod
+    from core.engine.protocol import (
+        TextEvt, RouteEvt, ChapterEndEvt,
+    )
+
+    chapters_dir = tmp_path / "chapters"
+    chapters_dir.mkdir()
+    (chapters_dir / "chapter01.md").write_text(
+        "```neon\n"
+        "id:start\n"
+        "id:end1:chapter02\n"
+        "node start\n"
+        "first chapter\n"
+        "node end\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    (chapters_dir / "chapter02.md").write_text(
+        "```neon\n"
+        "id:start\n"
+        "id:end2\n"
+        "node start\n"
+        "second chapter\n"
+        "node end\n"
+        "```\n",
+        encoding="utf-8",
+    )
+
+    # MemoryEngineBus + get_evt（v2-p0：ChapterManager 监听用）
+    class MemoryEngineBus:
+        def __init__(self, *a, **kw):
+            from core.engine.executor import MemoryEventSink
+            self._sink = MemoryEventSink()
+            self._get_idx = 0
+        @property
+        def events(self):
+            return self._sink.events
+        def put_evt(self, evt):
+            self._sink.put_evt(evt)
+        def get_cmd(self):
+            return None
+        def get_evt(self):
+            if self._get_idx < len(self._sink.events):
+                e = self._sink.events[self._get_idx]
+                self._get_idx += 1
+                return e
+            return None
+        def close(self):
+            pass
+
+    monkeypatch.setattr(main_mod, "EngineBus", MemoryEngineBus)
+    # P0-S1：CHAPTERS_ROOT 指向 tmp 目录
+    monkeypatch.setattr(main_mod, "CHAPTERS_ROOT", chapters_dir)
+
+    chapter01 = chapters_dir / "chapter01.md"
+    rc = main_mod.main(str(chapter01))
+    assert rc == 0
+
+    # 验证：两个章节的 text 都被 emit
+    events = main_mod._last_bus.events
+    text_contents = [
+        e.content.strip() for e in events
+        if isinstance(e, TextEvt)
+    ]
+    assert "first chapter" in text_contents
+    assert "second chapter" in text_contents
+    # 验证：chapter01 触发 RouteEvt('chapter02')
+    assert any(isinstance(e, RouteEvt) and e.target == "chapter02" for e in events)
+    # 验证：chapter02 触发 ChapterEndEvt
+    assert any(isinstance(e, ChapterEndEvt) for e in events)
+
+
+# 6. v2-p0 chapter-manager 集成：跨章节失败（目标章节不存在）→ main() 返回 1
+def test_main_routing_to_missing_chapter_returns_1(tmp_path, monkeypatch):
+    """chapter01 末尾 id:end1:nonexistent → ChapterManager 找不到 chapter → FileNotFoundError → main() 返回 1。"""
+    from core.engine import main as main_mod
+    from core.engine.protocol import LogEvt
+
+    chapters_dir = tmp_path / "chapters"
+    chapters_dir.mkdir()
+    (chapters_dir / "chapter01.md").write_text(
+        "```neon\n"
+        "id:start\n"
+        "id:end1:nonexistent\n"
+        "node start\n"
+        "will route to nonexistent\n"
+        "node end\n"
+        "```\n",
+        encoding="utf-8",
+    )
+
+    class MemoryEngineBus:
+        def __init__(self, *a, **kw):
+            from core.engine.executor import MemoryEventSink
+            self._sink = MemoryEventSink()
+            self._get_idx = 0
+        @property
+        def events(self):
+            return self._sink.events
+        def put_evt(self, evt):
+            self._sink.put_evt(evt)
+        def get_cmd(self):
+            return None
+        def get_evt(self):
+            if self._get_idx < len(self._sink.events):
+                e = self._sink.events[self._get_idx]
+                self._get_idx += 1
+                return e
+            return None
+        def close(self):
+            pass
+
+    monkeypatch.setattr(main_mod, "EngineBus", MemoryEngineBus)
+    monkeypatch.setattr(main_mod, "CHAPTERS_ROOT", chapters_dir)
+
+    chapter01 = chapters_dir / "chapter01.md"
+    rc = main_mod.main(str(chapter01))
+    # FileNotFoundError → main() catch → exit 1
+    assert rc == 1
+    # 验证：emit LogEvt error
+    events = main_mod._last_bus.events
+    assert any(isinstance(e, LogEvt) and e.level == "error" for e in events)
 
 
 # ─────────────────────────────────────────────────────────────────────

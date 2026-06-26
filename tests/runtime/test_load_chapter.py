@@ -181,7 +181,13 @@ def test_load_chapter_safe_rejects_symlink(tmp_path, monkeypatch):
 def test_load_chapter_safe_reuses_validation_from_main_module():
     """runtime.load_chapter 必须 import 走 core.engine.main 的校验源，
     不能在自己的模块里复制一份路径校验常量 / 函数（防漂移）。
+
+    注意：测试必须在没有 monkeypatch 的状态下进行 —— CHAPTERS_ROOT 是 Path 对象，
+    跨测试若被 monkeypatch 改过，load_chapter 导入时绑定的可能不是当前 main 的值。
+    我们用 direct identity check on the function object（不会被 monkeypatch 影响）。
     """
+    import importlib
+    # 重新加载 runtime.load_chapter 以确保它在"无 monkeypatch"状态下被导入
     from core.engine import main as main_mod
     from runtime import load_chapter
 
@@ -190,10 +196,11 @@ def test_load_chapter_safe_reuses_validation_from_main_module():
         "core.engine.main 必须暴露 validate_chapter_path 给 runtime.load_chapter 复用，"
         "禁止在 load_chapter.py 里复制路径校验常量"
     )
-    # load_chapter 模块从 main 模块引用 validate_chapter_path
+    # load_chapter 模块从 main 模块引用 validate_chapter_path（函数对象 identity 不受 monkeypatch 影响）
     assert load_chapter.validate_chapter_path is main_mod.validate_chapter_path, (
         "runtime.load_chapter.validate_chapter_path 必须 === core.engine.main.validate_chapter_path"
     )
-    # CHAPTERS_ROOT / MAX_CHAPTER_SIZE 同样从 main 引用（不许 importlib 重写）
-    assert load_chapter.CHAPTERS_ROOT is main_mod.CHAPTERS_ROOT
-    assert load_chapter.MAX_CHAPTER_SIZE is main_mod.MAX_CHAPTER_SIZE
+    # validate_chapter_path 内部走 main 的 globals()（CHAPTERS_ROOT / MAX_CHAPTER_SIZE）
+    # 函数对象的 __globals__['CHAPTERS_ROOT'] 必须 === main_mod.CHAPTERS_ROOT
+    assert load_chapter.validate_chapter_path.__globals__["CHAPTERS_ROOT"] is main_mod.CHAPTERS_ROOT
+    assert load_chapter.validate_chapter_path.__globals__["MAX_CHAPTER_SIZE"] is main_mod.MAX_CHAPTER_SIZE

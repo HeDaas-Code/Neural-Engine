@@ -340,3 +340,47 @@ def test_executor_accepts_shared_state_parameter():
     exe2 = Executor(story, bus)
     assert exe2.state is not shared
     assert isinstance(exe2.state, GameState)
+
+
+# ─── 9. initial_story：run() 先跑第一个 story 再进入循环（CLI 单章节入口） ─
+
+
+def test_run_runs_initial_story_then_waits_for_route_evt(tmp_path, monkeypatch):
+    """initial_story 非 None → run() 先用默认 factory 跑这个 story，然后进入 while 循环。
+    CLI 单章节场景：main.py 传 initial_story=first_story 给 ChapterManager.run()。
+    """
+    from runtime.chapter_manager import ChapterManager
+    from core.engine import main as main_mod
+    from core.engine.protocol import ChapterEndEvt
+
+    chapters_dir = tmp_path / "chapters"
+    chapters_dir.mkdir()
+    # 单章节：start + end with id:end2（无路由，触发 ChapterEndEvt）
+    (chapters_dir / "chapter01.md").write_text(
+        "```neon\n"
+        "id:start\n"
+        "id:end2\n"
+        "node start\n"
+        "hello\n"
+        "node end\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(main_mod, "CHAPTERS_ROOT", chapters_dir)
+
+    # 加载 initial_story
+    from runtime.load_chapter import load_chapter_safe
+    initial_story = load_chapter_safe(chapters_dir / "chapter01.md")
+
+    bus = FakeBus(events=[])  # 不预设 RouteEvt；executor emit ChapterEndEvt → run 退出
+    mgr = ChapterManager(chapters_dir, bus, initial_story=initial_story)
+    mgr.run()
+
+    # 验证：initial story 跑了（emit TextEvt "hello"）
+    text_contents = [e.content.strip() for e in bus.all_put_events if hasattr(e, "content") and not isinstance(e, type(e)) and not isinstance(e, ChapterEndEvt)]
+    # 简化：直接看 has TextEvt
+    from core.engine.protocol import TextEvt
+    text_evts = [e for e in bus.all_put_events if isinstance(e, TextEvt)]
+    assert any(e.content.strip() == "hello" for e in text_evts)
+    # 验证：emit ChapterEndEvt → run 退出
+    assert any(isinstance(e, ChapterEndEvt) for e in bus.all_put_events)

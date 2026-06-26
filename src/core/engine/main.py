@@ -117,7 +117,18 @@ def _try_spawn_gui() -> subprocess.Popen | None:
 
 
 def main(chapter_path: str) -> int:
-    """核心入口：装配 EngineBus + 加载章节 + 命令循环 + GUI 降级。"""
+    """核心入口：装配 EngineBus + 加载章节 + ChapterManager 跨章节 + GUI 降级。
+
+    v2-p0 chapter-manager 改造：替换 Executor(story, bus).run() 为
+    ChapterManager(CHAPTERS_ROOT, bus, initial_story=story).run()。
+    ChapterManager 负责：
+    - 跑 initial_story（第一个章节）
+    - 监听 bus 上的 RouteEvt → 加载新章节 → 跑 executor
+    - 收到 ChapterEndEvt → 退出
+    - 跨章节状态共享（shared_state GameState）
+
+    CLI 行为保持兼容：单章节（如 chapter01.md 无跨章节路由）走 initial_story + ChapterEndEvt → 退出 0。
+    """
     global _last_bus
 
     # 1. 尝试 spawn GUI（v0-issue-18 落地前容错）
@@ -137,7 +148,7 @@ def main(chapter_path: str) -> int:
         except Exception:
             pass
 
-    # 4. 加载章节
+    # 4. 加载第一个章节
     try:
         story = _load_story(chapter_path)
     except (FileNotFoundError, ParserError, ValueError) as e:
@@ -157,15 +168,16 @@ def main(chapter_path: str) -> int:
                 gui_proc.kill()
         return 1
 
-    # 5. 构造 Executor 跑
+    # 5. v2-p0：构造 ChapterManager 处理初始章节 + 跨章节路由
+    from runtime.chapter_manager import ChapterManager
     try:
-        exe = Executor(story, bus)
-        exe.run()
-    except (ValueError, RuntimeError, NotImplementedError) as e:
+        mgr = ChapterManager(CHAPTERS_ROOT, bus, initial_story=story)
+        mgr.run()
+    except (FileNotFoundError, ValueError, RuntimeError, NotImplementedError) as e:
         try:
             bus.put_evt(LogEvt(
                 level="error",
-                message=f"executor failed: {e}",
+                message=f"chapter manager failed: {e}",
             ))
         except Exception:
             pass
