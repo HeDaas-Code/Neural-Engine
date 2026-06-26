@@ -97,3 +97,90 @@ def test_from_dict_wrong_type_raises_value_error():
     # path 应该是 str，传 int
     with pytest.raises(ValueError):
         LoadChapterCmd.from_dict({"cmd": "load_chapter", "path": 42})
+
+
+# ─── v2-skeleton · EP-11 · SaveCmd / LoadCmd（存档/读档） ────────────────────
+#
+# 复用 v0 既有 helper 函数（_check_dict / _require_str）与命令注册机制（_CMD_REGISTRY）。
+# round-trip + parse_cmd 分发 + 错误处理 三件套与 v0 一致。
+
+
+# 9. SaveCmd round-trip
+def test_save_cmd_round_trip():
+    from core.engine.protocol import SaveCmd
+
+    cmd = SaveCmd(slot="01")
+    d = cmd.to_dict()
+    assert d == {"cmd": "save", "slot": "01"}
+
+    restored = SaveCmd.from_dict(d)
+    assert restored == cmd
+
+
+# 10. LoadCmd round-trip
+def test_load_cmd_round_trip():
+    from core.engine.protocol import LoadCmd
+
+    cmd = LoadCmd(slot="02")
+    d = cmd.to_dict()
+    assert d == {"cmd": "load", "slot": "02"}
+
+    restored = LoadCmd.from_dict(d)
+    assert restored == cmd
+
+
+# 11. parse_cmd 分发 SaveCmd / LoadCmd（_CMD_REGISTRY 注册验证）
+def test_parse_cmd_dispatches_save_and_load():
+    from core.engine.protocol import (
+        SaveCmd, LoadCmd, parse_cmd,
+    )
+
+    a = parse_cmd({"cmd": "save", "slot": "01"})
+    assert isinstance(a, SaveCmd)
+    assert a.slot == "01"
+
+    b = parse_cmd({"cmd": "load", "slot": "02"})
+    assert isinstance(b, LoadCmd)
+    assert b.slot == "02"
+
+
+# 12. SaveCmd 缺 slot 字段抛 ValueError
+def test_save_cmd_from_dict_missing_slot_raises_value_error():
+    from core.engine.protocol import SaveCmd
+
+    with pytest.raises(ValueError):
+        SaveCmd.from_dict({"cmd": "save"})
+
+
+# 13. SaveCmd slot 类型错（int）抛 ValueError
+def test_save_cmd_from_dict_wrong_slot_type_raises_value_error():
+    from core.engine.protocol import SaveCmd
+
+    with pytest.raises(ValueError):
+        SaveCmd.from_dict({"cmd": "save", "slot": 42})
+
+
+# 14. LoadCmd 缺 slot 字段抛 ValueError
+def test_load_cmd_from_dict_missing_slot_raises_value_error():
+    from core.engine.protocol import LoadCmd
+
+    with pytest.raises(ValueError):
+        LoadCmd.from_dict({"cmd": "load"})
+
+
+# 15. LoadCmd slot 类型错（None）抛 ValueError
+def test_load_cmd_from_dict_wrong_slot_type_raises_value_error():
+    from core.engine.protocol import LoadCmd
+
+    with pytest.raises(ValueError):
+        LoadCmd.from_dict({"cmd": "load", "slot": None})
+
+
+# 16. _CMD_REGISTRY 含 "save" / "load" 两个 key（防回归：未来重构不能漏注册）
+def test_cmd_registry_contains_save_and_load():
+    from core.engine.protocol import _CMD_REGISTRY, SaveCmd, LoadCmd
+
+    assert "save" in _CMD_REGISTRY
+    assert "load" in _CMD_REGISTRY
+    assert _CMD_REGISTRY["save"] is SaveCmd
+    assert _CMD_REGISTRY["load"] is LoadCmd

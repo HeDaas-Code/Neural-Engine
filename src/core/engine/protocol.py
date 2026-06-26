@@ -6,6 +6,17 @@ v0-issue-3 命令 schema + v0-issue-4 事件 schema 共用本文件（按 ADR §
 - to_dict() 只返回 dict，不做 json.dumps（序列化由 bus 负责）
 - from_dict() 只做字段拷贝，不做 json.loads
 - 字段缺失 / 类型错抛 ValueError
+
+v2 扩展（EP-11 · 存档/读档）：
+- `SaveCmd(slot)` —— 触发 SaveManager.save(slot, state)
+- `LoadCmd(slot)` —— 触发 SaveManager.load(slot) 恢复 GameState
+- 注册到 `_CMD_REGISTRY["save"]` / `_CMD_REGISTRY["load"]`，parse_cmd 自动分发
+- v3+ 落地：V2-07 任务接管 SaveManager 完整实现
+
+v2 扩展（EP-06 · 修饰器事件 kind）：
+- `DecoratorEvt(kind)` 新增 `kind: Literal["call", "stop"] = "call"` 字段
+- 默认 "call"（向后兼容）；显式 "stop" 表示停止对应 name 的触发器
+- from_dict 缺 kind 时默认 "call"（老 dict 仍能 parse）
 """
 from __future__ import annotations
 
@@ -64,6 +75,43 @@ class LoadChapterCmd:
 
 
 @dataclass(frozen=True, slots=True)
+class SaveCmd:
+    """存档命令（GUI → Engine，v2 骨架扩展 · EP-11）。
+
+    v2 用途：触发 SaveManager.save(slot, state) 把当前 GameState 持久化到
+    `~/.neural-engine/saves/{slot}.json`（D4 决策）。
+    v3+ 落地：V2-07 任务接管完整存档逻辑。
+    """
+    slot: str
+
+    def to_dict(self) -> dict:
+        return {"cmd": "save", "slot": self.slot}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "SaveCmd":
+        _check_dict(d, "SaveCmd")
+        return cls(slot=_require_str(d, "slot", "SaveCmd"))
+
+
+@dataclass(frozen=True, slots=True)
+class LoadCmd:
+    """读档命令（GUI → Engine，v2 骨架扩展 · EP-11）。
+
+    v2 用途：触发 SaveManager.load(slot) 恢复存档 → 替换 GameState。
+    v3+ 落地：V2-07 任务接管完整读档逻辑。
+    """
+    slot: str
+
+    def to_dict(self) -> dict:
+        return {"cmd": "load", "slot": self.slot}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "LoadCmd":
+        _check_dict(d, "LoadCmd")
+        return cls(slot=_require_str(d, "slot", "LoadCmd"))
+
+
+@dataclass(frozen=True, slots=True)
 class UserInputCmd:
     value: str
 
@@ -92,6 +140,8 @@ class ShutdownCmd:
 
 _CMD_REGISTRY = {
     "load_chapter": LoadChapterCmd,
+    "save": SaveCmd,
+    "load": LoadCmd,
     "user_input": UserInputCmd,
     "shutdown": ShutdownCmd,
 }
