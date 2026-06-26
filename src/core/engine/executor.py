@@ -8,6 +8,10 @@ v1 (ADR-0004): _execute_if 接入 ExprDispatcher 真求值。
 v2-p0 chapter-manager: Executor.__init__ 接受 state: GameState | None = None
     （V2-04 · OQ-3 决策）—— 跨章节状态共享，ChapterManager 跨章节跳转时
     复用同一 GameState 让 vars 跨章节保留。
+v2-p0 save-load (V2-06 · EP-09):
+    - GameState 加 `current_block_id` 字段 + `to_dict()` / `from_dict()`
+    - Executor.run() 入口 / _next_block 后置更新 current_block_id
+    - D2 决策：to_dict 输出 `version: 1` + `vars/path/current_block_id` 字段
 """
 from __future__ import annotations
 
@@ -63,12 +67,91 @@ class MemoryInputSink(MemoryEventSink):
         return None
 
 
+# ─── 存档支持：当前支持的存档版本常量 ─────────────────────────────────────────
+# v3+ 升级时写迁移函数（from_dict 检测 version 字段，不匹配抛 ValueError）
+GAMESTATE_SAVE_VERSION: int = 1
+
+
 @dataclass
 class GameState:
-    """执行期状态（v0 全字符串变量）。"""
+    """执行期状态（v0 全字符串变量）。
+
+    v2-p0 save-load (V2-06 · EP-09) 扩展：
+    - `current_block_id`: str | None  —— 当前所在块 id（存档恢复用）
+    - `to_dict()`: 序列化为 dict（含 `version: 1` + vars/path/current_block_id）
+    - `from_dict(d)`: 类方法，反序列化恢复（带 version 校验）
+    """
     vars: dict = field(default_factory=dict)
     path: list = field(default_factory=list)
     next_table: dict = field(default_factory=dict)
+    current_block_id: str | None = None  # v2 新增：存档恢复锚点
+
+    def to_dict(self) -> dict:
+        """序列化为 dict（D2 决策：复用 protocol.py JSON 模式 + 版本字段）。
+
+        Returns:
+            dict 形如 `{"version": 1, "vars": {...}, "path": [...], "current_block_id": "..."}`
+            - `vars` / `path` 用防御性拷贝，外部修改不影响 GameState
+        """
+        return {
+            "version": GAMESTATE_SAVE_VERSION,
+            "vars": dict(self.vars),
+            "path": list(self.path),
+            "current_block_id": self.current_block_id,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "GameState":
+        """从 dict 反序列化（v2 读档用）。
+
+        向后兼容：
+        - 缺 `vars` / `path` / `current_block_id` 字段 → 用默认值
+        - 缺 `version` 字段 → 视作 v1 老存档（兼容）
+        - `version` > 当前支持版本 → 抛 ValueError（V3+ 升级保护）
+
+        防御性：内部 vars/path/current_block_id 都是 d 的拷贝，外部改 d 不影响 state。
+        """
+        if not isinstance(d, dict):
+            raise ValueError(
+                f"GameState.from_dict 期望 dict，得到 {type(d).__name__}"
+            )
+        # version 校验（V3+ 升级锚点）
+        ver_raw = d.get("version")
+        if ver_raw is not None:
+            if not isinstance(ver_raw, int):
+                raise ValueError(
+                    f"GameState.from_dict.version 应为 int，得到 {type(ver_raw).__name__}"
+                )
+            if ver_raw > GAMESTATE_SAVE_VERSION:
+                raise ValueError(
+                    f"GameState 存档 version {ver_raw} > 当前支持版本 "
+                    f"{GAMESTATE_SAVE_VERSION}（V3+ 升级请写迁移函数）"
+                )
+            # ver_raw < GAMESTATE_SAVE_VERSION 也允许（向下兼容旧版）
+        # vars 字段
+        vars_raw = d.get("vars", {})
+        if not isinstance(vars_raw, dict):
+            raise ValueError(
+                f"GameState.from_dict.vars 应为 dict，得到 {type(vars_raw).__name__}"
+            )
+        # path 字段
+        path_raw = d.get("path", [])
+        if not isinstance(path_raw, list):
+            raise ValueError(
+                f"GameState.from_dict.path 应为 list，得到 {type(path_raw).__name__}"
+            )
+        # current_block_id 字段
+        cb_raw = d.get("current_block_id")
+        if cb_raw is not None and not isinstance(cb_raw, str):
+            raise ValueError(
+                f"GameState.from_dict.current_block_id 应为 str 或 None，"
+                f"得到 {type(cb_raw).__name__}"
+            )
+        return cls(
+            vars=dict(vars_raw),  # 防御性拷贝
+            path=list(path_raw),
+            current_block_id=cb_raw,
+        )
 
 
 class Executor:
@@ -163,9 +246,19 @@ class Executor:
                 return item
         return None
 
+    @staticmethod
+    def _block_id(block: Block) -> str:
+        """取块的 id（从 meta 找 IdMeta；不存在抛 RuntimeError）。"""
+        for item in block.meta:
+            if isinstance(item, IdMeta):
+                return item.id
+        raise RuntimeError(f"block has no IdMeta: {block}")
+
     def run(self) -> None:
         """从 entry 块开始执行。"""
         entry_block = self._find_entry_block()
+        # v2-p0 save-load (V2-06): 入口处设置 current_block_id（存档恢复锚点）
+        self.state.current_block_id = self._block_id(entry_block)
         self._execute_block_loop(entry_block)
 
     def _execute_block_loop(self, start_block: Block) -> None:
@@ -177,11 +270,16 @@ class Executor:
             current = self._next_block(current)
 
     def _next_block(self, current: Block) -> Block | None:
-        """根据 self.next 决定下一块；None 表示停止。"""
+        """根据 self.next 决定下一块；None 表示停止。
+
+        v2-p0 save-load (V2-06): 跳转成功后置更新 `state.current_block_id` 到下一块。
+        """
         if self.next is None:
             return None
         _, target_id = self.next
-        return self._find_block_by_id(target_id)
+        next_block = self._find_block_by_id(target_id)
+        self.state.current_block_id = self._block_id(next_block)
+        return next_block
 
     def run_block(self, block: Block) -> None:
         """单块执行：v0-issue-14 实现 Text/In/Echo/NextId，v0-issue-15 修饰器。"""

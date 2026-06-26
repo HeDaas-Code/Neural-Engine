@@ -150,7 +150,7 @@ def test_executor_next_block_updates_current_block_id_to_next():
     start_block = Block(
         meta=(IdMeta(id="start", lineno=1),),
         next_table=(NextDecl(var_name=None, target_id="c1", lineno=2),),
-        body=(Start(), Text(content="go"), NextId(target_id="c1", lineno=3)),
+        body=(Start(), Text(content="go"), NextId(target_id="c1")),
         loc=_loc(),
     )
     c1_block = Block(
