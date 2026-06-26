@@ -11,7 +11,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 sys.path.insert(0, f"{REPO_ROOT}/src")
 
 from core.engine.interpreter import parse_next_decls  # noqa: E402
-from core.engine.ast_nodes import NextDecl, ParserError  # noqa: E402
+from core.engine.ast_nodes import ParserError  # noqa: E402
 
 
 # 1. 单 next 简写

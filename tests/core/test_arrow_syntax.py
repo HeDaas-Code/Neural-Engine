@@ -2,7 +2,6 @@
 
 验证新旧两种箭头都能正确解析。
 """
-import pytest
 
 from core.engine.interpreter import (  # noqa: E402
     parse_block_skeleton, parse_block_meta, parse_block_body,

@@ -85,7 +85,6 @@ def test_chapter_manager_routes_from_chapter01_route_to_chapter_route(monkeypatc
     from core.engine.protocol import (
         TextEvt, RouteEvt, ChapterEndEvt,
     )
-    from runtime.chapter_manager import ChapterManager
 
     class MemoryEngineBus:
         def __init__(self, *a, **kw):

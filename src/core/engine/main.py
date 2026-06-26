@@ -14,7 +14,6 @@ from pathlib import Path
 
 from core.engine.ast_nodes import ParserError
 from core.engine.bus import EngineBus
-from core.engine.executor import Executor
 from core.engine.interpreter import (
     extract_neon_blocks,
     parse_block_skeleton,

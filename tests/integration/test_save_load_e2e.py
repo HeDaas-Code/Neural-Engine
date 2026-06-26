@@ -12,9 +12,7 @@
 import sys
 from pathlib import Path
 
-import pytest
 
-import os
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
@@ -50,8 +48,7 @@ def test_chapter01_v1_runs_to_chapter_end_baseline():
     验证不存档也能正常跑（确认 SaveCmd/LoadCmd 拦截逻辑不破坏正常流程）。
     """
     from core.engine.executor import Executor
-    from core.engine.interpreter import extract_neon_blocks, parse_block_skeleton
-    from core.engine.ast_nodes import Story
+    from core.engine.interpreter import extract_neon_blocks
     from core.engine.protocol import (
         SaveAckEvt, LoadAckEvt, UserInputCmd, ChapterEndEvt,
     )

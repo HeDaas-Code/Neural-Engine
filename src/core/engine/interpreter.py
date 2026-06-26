@@ -19,6 +19,7 @@ v1 指针（ADR-0003）：
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -501,8 +502,6 @@ def parse_block_body(
 
 # ─── 第六阶段：node if 解析 ──────────────────────────────────────────────────
 
-
-import re
 
 _BINARY_IF_RE = re.compile(r"^node if\s+(\w+)\s*\[(\w+),(\w+)\]\s*$")
 _MULTI_IF_RE = re.compile(r"^node if\s+(\w+)\s*\[([^\]]+)\]\s*$")

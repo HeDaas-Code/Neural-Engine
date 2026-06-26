@@ -180,7 +180,6 @@ def test_executor_accepts_save_manager_parameter():
     """Executor.__init__ 接受 save_manager: SaveManager | None = None。"""
     from core.engine.executor import Executor
     from core.engine.ast_nodes import Story
-    from core.engine.interpreter import extract_neon_blocks
     from runtime.save import SaveManager
 
     sink = MixedCmdSink()
@@ -201,7 +200,7 @@ def test_executor_processes_save_cmd_emits_save_ack_evt(tmp_path):
     """Send SaveCmd via sink → Executor 调 SaveManager.save → 发 SaveAckEvt.ok=True。"""
     from core.engine.executor import Executor
     from core.engine.ast_nodes import (
-        Story, Block, IdMeta, IdEnd, Start, Text, End, In,
+        Story, Block, IdMeta, IdEnd, Start, End, In,
     )
     from core.engine.protocol import SaveCmd, SaveAckEvt, UserInputCmd
     from runtime.save import SaveManager
@@ -286,7 +285,7 @@ def test_executor_processes_load_cmd_emits_load_ack_and_replaces_state(tmp_path)
 
 def test_executor_save_cmd_interleaved_with_user_input(tmp_path):
     """In 节点 cmd 队列：[SaveCmd, UserInputCmd("ok")] → 先存档，后用 ok 作输入。"""
-    from core.engine.executor import Executor, GameState
+    from core.engine.executor import Executor
     from core.engine.ast_nodes import (
         Story, Block, IdMeta, IdEnd, Start, In, End,
     )

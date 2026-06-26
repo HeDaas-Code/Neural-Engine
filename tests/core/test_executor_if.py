@@ -7,11 +7,11 @@ import pytest
 from core.engine.executor import Executor, MemoryEventSink, MemoryInputSink  # noqa: E402
 from core.engine.ast_nodes import (  # noqa: E402
     Story, Block, BlockLocation, IdMeta, IdEnd, NextDecl,
-    Start, End, Text, NextId, If, Branch, CallExpression,
+    Start, End, If, Branch, CallExpression,
     In as AstIn, Echo as AstEcho,
 )
 from core.engine.protocol import (  # noqa: E402
-    TextEvt, LogEvt, ChapterEndEvt, PromptInputEvt, UserInputCmd,
+    LogEvt, ChapterEndEvt,
 )
 
 

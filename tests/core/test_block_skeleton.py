@@ -66,7 +66,7 @@ def test_full_line_comment_skipped():
     # meta_lines 应只有 id: c1
     assert skel.meta_lines == _lines("id: c1\n")
     # 注释行不在 body
-    assert not any("#" in l for l in skel.body_lines if l.strip())
+    assert not any("#" in line for line in skel.body_lines if line.strip())
 
 
 # 7. 空行跳过

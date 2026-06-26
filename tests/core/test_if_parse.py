@@ -12,7 +12,7 @@ sys.path.insert(0, f"{REPO_ROOT}/src")
 
 from core.engine.interpreter import parse_if_stmt  # noqa: E402
 from core.engine.ast_nodes import (  # noqa: E402
-    If, Branch, NextDecl, CallExpression, ParserError,
+    NextDecl, CallExpression, ParserError,
 )
 
 

@@ -11,11 +11,10 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 sys.path.insert(0, f"{REPO_ROOT}/src")
 
 from core.engine.executor import (  # noqa: E402
-    GameState, Executor, EventSink, MemoryEventSink,
+    GameState, Executor, MemoryEventSink,
 )
 from core.engine.ast_nodes import (  # noqa: E402
-    Story, Block, BlockLocation, IdMeta, IdEnd, NextDecl,
-    Start, End, Text, NextId, ParserError,
+    Story, Block, BlockLocation, IdMeta, IdEnd, Start, End, Text,
 )
 from core.engine.protocol import RouteEvt, ChapterEndEvt  # noqa: E402
 

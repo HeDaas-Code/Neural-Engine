@@ -177,7 +177,6 @@ def test_default_executor_factory_uses_executor_class(tmp_path, monkeypatch):
     from runtime.chapter_manager import ChapterManager
     from core.engine import main as main_mod
     from core.engine.executor import Executor
-    from core.engine.protocol import RouteEvt
 
     chapters_dir = tmp_path / "chapters"
     chapters_dir.mkdir()
@@ -187,14 +186,13 @@ def test_default_executor_factory_uses_executor_class(tmp_path, monkeypatch):
     monkeypatch.setattr(main_mod, "CHAPTERS_ROOT", chapters_dir)
 
     bus = FakeBus()
-    mgr = ChapterManager(chapters_dir, bus)  # 没传 factory
+    ChapterManager(chapters_dir, bus)  # 没传 factory — 验证不报错
 
     # 验证默认 factory 走 Executor
     from runtime import chapter_manager as cm_mod
     assert cm_mod._default_executor_factory is not None
 
     # 直接调 default factory，验证返回 Executor 实例
-    from core.engine.interpreter import extract_neon_blocks
     from core.engine.ast_nodes import Story
     story = Story(blocks=())
     exe = cm_mod._default_executor_factory(story, bus)
@@ -264,7 +262,7 @@ def test_run_loop_processes_multiple_route_events_until_chapter_end(tmp_path, mo
     """
     from runtime.chapter_manager import ChapterManager
     from core.engine import main as main_mod
-    from core.engine.protocol import RouteEvt, ChapterEndEvt, TextEvt
+    from core.engine.protocol import RouteEvt, ChapterEndEvt
 
     chapters_dir = tmp_path / "chapters"
     chapters_dir.mkdir()
@@ -324,7 +322,6 @@ def test_run_loop_processes_multiple_route_events_until_chapter_end(tmp_path, mo
 def test_executor_accepts_shared_state_parameter():
     """Executor.__init__ 接受 state: GameState | None = None；非 None → 复用。"""
     from core.engine.executor import Executor, GameState
-    from core.engine.interpreter import extract_neon_blocks
     from core.engine.ast_nodes import Story
 
     bus = FakeBus()
@@ -377,8 +374,6 @@ def test_run_runs_initial_story_then_waits_for_route_evt(tmp_path, monkeypatch):
     mgr.run()
 
     # 验证：initial story 跑了（emit TextEvt "hello"）
-    text_contents = [e.content.strip() for e in bus.all_put_events if hasattr(e, "content") and not isinstance(e, type(e)) and not isinstance(e, ChapterEndEvt)]
-    # 简化：直接看 has TextEvt
     from core.engine.protocol import TextEvt
     text_evts = [e for e in bus.all_put_events if isinstance(e, TextEvt)]
     assert any(e.content.strip() == "hello" for e in text_evts)

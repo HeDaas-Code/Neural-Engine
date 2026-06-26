@@ -186,7 +186,6 @@ def test_load_chapter_safe_reuses_validation_from_main_module():
     跨测试若被 monkeypatch 改过，load_chapter 导入时绑定的可能不是当前 main 的值。
     我们用 direct identity check on the function object（不会被 monkeypatch 影响）。
     """
-    import importlib
     # 重新加载 runtime.load_chapter 以确保它在"无 monkeypatch"状态下被导入
     from core.engine import main as main_mod
     from runtime import load_chapter
