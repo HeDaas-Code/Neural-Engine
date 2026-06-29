@@ -9,7 +9,7 @@
 import pytest
 
 from core.engine.expr import (  # noqa: E402
-    ExprDispatcher, ExprError, BUILTIN_FUNCS,
+    ExprDispatcher, CustomExecutor, ExprError, BUILTIN_FUNCS,
 )
 
 
@@ -93,3 +93,59 @@ class TestBuiltinFuncs:
     def test_白名单_包含核心函数(self):
         for name in ("len", "int", "str", "bool", "min", "max", "abs", "round"):
             assert name in BUILTIN_FUNCS, f"missing builtin: {name}"
+
+
+# 6. 其他求值期异常 → ExprError 兜底 (except Exception 分支)
+class TestRuntimeErrors:
+    def test_除零_抛_ExprError(self):
+        """条件中出现除法是合理场景——ZeroDivisionError 必须被包装为 ExprError,
+        而非透传绕过 executor._execute_if 的 ExprError 捕获。"""
+        s = FakeState({"x": 1})
+        d = ExprDispatcher(s)
+        with pytest.raises(ExprError):
+            d.eval("1 / 0")
+
+
+# 7. eval_bool 非布尔值的真值化 (bool() 强制)
+class TestBoolCoercion:
+    def test_非空容器为真(self):
+        s = FakeState({"items": [1, 2, 3]})
+        d = ExprDispatcher(s)
+        assert d.eval_bool("items") is True
+
+    def test_空容器为假(self):
+        s = FakeState({"items": []})
+        d = ExprDispatcher(s)
+        assert d.eval_bool("items") is False
+
+
+# 8. eval_int 类型截断语义
+class TestEvalIntCoercion:
+    def test_浮点结果向零截断(self):
+        """eval_int 内部走 int(self.eval(expr))；int(3.5)==3 是分支匹配所依赖的语义,
+        锁定以防被 round/向上取整等实现替换。"""
+        s = FakeState({"n": 7})
+        d = ExprDispatcher(s)
+        assert d.eval_int("n / 2") == 3
+
+
+# 9. fallback handler 异常契约 (ADR-0004: 调度链全部失败 → ExprError)
+class TestFallbackExceptionContract:
+    def test_handler_抛非ExprError_包装为ExprError(self):
+        """业务侧 register_evaluator 是扩展点——handler 自身抛 KeyError/ValueError 时,
+        ExprDispatcher 必须按契约包装为 ExprError, 否则会绕过 executor._execute_if 的
+        ExprError 捕获导致引擎崩溃 (而非走 error LogEvt 路径)。"""
+        s = FakeState({})
+        custom = CustomExecutor(s)
+        custom.register_evaluator(r"^boom$", lambda expr, vars: vars["missing"])  # KeyError
+        d = ExprDispatcher(s, custom=custom)
+        with pytest.raises(ExprError):
+            d.eval("boom")
+
+    def test_handler_抛ExprError_仍为ExprError(self):
+        """ExprError 路径保持原有行为 (带 simpleeval 上下文)。"""
+        s = FakeState({})
+        custom = CustomExecutor(s)  # 无 handler → eval_fallback 抛 ExprError
+        d = ExprDispatcher(s, custom=custom)
+        with pytest.raises(ExprError):
+            d.eval("totally_unknown_expr")
