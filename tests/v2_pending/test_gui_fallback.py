@@ -154,15 +154,17 @@ def test_fallback_no_pyqt6_silences_decorator_and_log(monkeypatch):
 
 # 6. PyQt6 spec 在但 pyqt6_main.py 不存在 → 降级到 CLI，不抛 ImportError
 def test_fallback_pyqt6_present_but_pyqt6_main_missing(monkeypatch):
-    """find_spec 返回 Mock（假装 PyQt6 装了），但 `runtime.gui.pyqt6_main` 模块
-    不存在 → main() 必须降级到 CLI 占位，不抛 ImportError/FileNotFoundError。
+    """find_spec 返回 Mock（假装 PyQt6 装了），但 `runtime.gui.pyqt6_main` import
+    失败 → main() 必须降级到 CLI 占位，不抛 ImportError/FileNotFoundError。
 
-    这模拟 V2-01 后续任务还没建 pyqt6_main.py 时的中间状态。
+    V2-01 落地后 pyqt6_main.py 真实存在，本测试通过把 sys.modules["runtime.gui.pyqt6_main"]
+    设为 None 强制 import 失败（Python import None 模块会抛 ImportError），
+    验证 _try_pyqt6_main 的 ImportError 捕获 → CLI 降级路径仍然健壮。
     """
     # Mock find_spec 返回非 None（假装 PyQt6 已装）
     monkeypatch.setattr("runtime.gui.main.find_spec", lambda name: object() if name == "PyQt6" else None)
-    # 确保 pyqt6_main 不在 sys.modules
-    monkeypatch.delitem(sys.modules, "runtime.gui.pyqt6_main", raising=False)
+    # 把 pyqt6_main 设为 None → `from runtime.gui import pyqt6_main` 抛 ImportError
+    monkeypatch.setitem(sys.modules, "runtime.gui.pyqt6_main", None)
 
     from runtime.gui.main import main
     from core.engine.protocol import TextEvt

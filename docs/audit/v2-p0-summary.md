@@ -249,7 +249,7 @@ v3 阶段 D：工具链收尾（4-6 周，可分阶段）
 
 | # | 妥协 | 影响 | 处理建议 |
 |---|---|---|---|
-| 1 | **PyQt6 未安装** → 工厂 fallback CLI（环境性，非代码 bug） | CI 真实状态未验证 PyQt6 路径 | v3 加 PyQt6 真窗口截图测试 |
+| 1 | ~~**PyQt6 未安装** → 工厂 fallback CLI（环境性，非代码 bug）~~ **已修复** | 真 PyQt6 装上后 `_run_with_sinks` 无 DISPLAY 时自动 offscreen（Qt 行业默认）；v0 CLI 测试用 autouse fixture 锁 find_spec=None 保留 CLI 基线 | ✅ Qt 6.11.0 + offscreen 后端实测：TextEvt 渲染 + ChapterEndEvt 关窗 + app.exec 退出闭环 |
 | 2 | **装饰器钩子只记录不渲染**（@bgm v3+ AudioManager.play/stop 接管） | 玩家听不到背景音乐 | v3 接 AudioManager 后重新跑 E2E |
 | 3 | **章节图元数据 index.yaml 未实现**（v3 章节图阶段处理） | 章节间关系无集中配置，靠 `id:endX:chapterYY` 扫描 | v3 4.3 实现章节图可视化时同步做 |
 | 4 | **存档版本字段已加但无迁移逻辑** | 未来存档格式变更时老存档不可读 | v3 加版本迁移（`migrate_v1_to_v2` 函数） |

@@ -16,6 +16,7 @@
 | v0 端到端路径 | ✅ **in → echo → end** | `tests/integration/test_echo_path.py` |
 | v1 端到端路径 | ✅ **expr if + echo 拼接 + ←/→** | `tests/integration/test_v1_e2e.py` |
 | v2 跨章节路由 | ✅ **chapter01_route → chapter_route** | `tests/v2_pending/test_chapter_loading.py` |
+| v2-p0 真 PyQt6 窗口 | ✅ **已实测** | Qt 6.11.0 + offscreen 后端，TextEvt 渲染 + ChapterEndEvt 关窗验证通过 |
 | 实现偏差登记 | v0: 4 条 · v1: 6 条 | [ADR-0002 §5](docs/adr/0002-v0-engine-implementation.md) · [ADR-0004 附录](docs/adr/0004-appendix-deviations.md) |
 
 > v2-p0 阶段边界：PyQt6 GUI 窗口（fake mock 测试） + SaveManager 存档/读档 + ChapterManager 跨章节路由 + @style/@bgm 装饰器钩子 + P0-S1 路径校验 + find_spec PyQt6 探测降级。

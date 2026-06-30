@@ -203,10 +203,11 @@ def test_pyqt6_main_module_imports_without_pyqt6():
 
 def test_run_with_sinks_raises_when_pyqt6_not_installed(monkeypatch):
     """_run_with_sinks 在 PyQt6 不可用时 raise RuntimeError（D3 决策要求 fallback CLI）。"""
-    # 强制 PyQt6 不可用
-    monkeypatch.delitem(sys.modules, "PyQt6", raising=False)
-    monkeypatch.delitem(sys.modules, "PyQt6.QtCore", raising=False)
-    monkeypatch.delitem(sys.modules, "PyQt6.QtWidgets", raising=False)
+    # 强制 PyQt6 import 失败：sys.modules 设 None 比 delitem 更彻底
+    # （delitem 后真装了的包会被重新 import 成功；setitem None 会抛 ImportError）
+    monkeypatch.setitem(sys.modules, "PyQt6", None)
+    monkeypatch.setitem(sys.modules, "PyQt6.QtCore", None)
+    monkeypatch.setitem(sys.modules, "PyQt6.QtWidgets", None)
 
     from runtime.gui.pyqt6_sink import PyQt6Sink
     from runtime.gui.pyqt6_input import PyQt6InputSink

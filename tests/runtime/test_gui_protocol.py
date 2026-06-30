@@ -1,6 +1,11 @@
 """v0-issue-18 GUI CLI 占位测试。
 
 按 issue #41 路径 B（CLI 占位，不依赖 PyQt6）实现 main 事件分发。
+
+注意：本文件是 v0 CLI 行为基线。即使环境装了 PyQt6，这些测试也必须走 CLI
+路径（不走 PyQt6 窗口）——否则 FakeBus 喂完事件后 Qt 事件循环不会退出。
+用 autouse fixture 强制 `runtime.gui.main.find_spec` 返回 None，
+让 main() 降级到 CLI 占位主循环（D3 决策的 fallback 路径）。
 """
 import io
 import sys
@@ -8,8 +13,19 @@ from contextlib import redirect_stdout
 
 
 import os
+import pytest
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, f"{REPO_ROOT}/src")
+
+
+@pytest.fixture(autouse=True)
+def _force_cli_fallback(monkeypatch):
+    """强制 main() 走 CLI 路径，不被环境里的 PyQt6 劫持。
+
+    保留 v0 CLI 行为基线：本文件所有断言针对 print/input 输出，
+    PyQt6 路径会启动 Qt 事件循环且 FakeBus 无法触发窗口关闭。
+    """
+    monkeypatch.setattr("runtime.gui.main.find_spec", lambda name: None)
 
 
 class FakeBus:

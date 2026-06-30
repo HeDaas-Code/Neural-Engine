@@ -24,6 +24,7 @@ D5 决策：不引入 asyncio——QThread + 信号槽跨线程通信。
 """
 from __future__ import annotations
 
+import os
 import sys
 from typing import Optional
 
@@ -208,6 +209,15 @@ def _run_with_sinks(bus, sink: PyQt6Sink, input_sink: PyQt6InputSink) -> int:
     MainWindowCls = _build_main_window_class(qt)
 
     # 1. QApplication 单例
+    # 无显示后端（headless CI / SSH 无 DISPLAY）→ 自动切 offscreen 平台插件
+    # （Qt 行业默认：QPA_PLATFORM 不在 + DISPLAY 不在 → offscreen，避免 abort）
+    if (
+        not sys.platform.startswith("win")
+        and "QT_QPA_PLATFORM" not in os.environ
+        and not os.environ.get("DISPLAY")
+        and QApplication.instance() is None
+    ):
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
     app = QApplication.instance() or QApplication(sys.argv)
 
     # 2. 主窗口（构造时自动 show + 绑定 sink._evt_handler）
