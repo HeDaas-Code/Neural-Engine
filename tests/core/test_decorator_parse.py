@@ -2,7 +2,6 @@
 
 按 issue #34 acceptance criteria 验证 parse_decorator。
 """
-import re
 import sys
 
 import pytest

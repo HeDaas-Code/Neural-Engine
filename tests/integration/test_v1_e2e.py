@@ -16,7 +16,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 from core.engine.main import _load_story  # noqa: E402
 from core.engine.executor import Executor, MemoryInputSink  # noqa: E402
 from core.engine.protocol import (  # noqa: E402
-    TextEvt, PromptInputEvt, ChapterEndEvt, LogEvt,
+    TextEvt,
 )
 
 

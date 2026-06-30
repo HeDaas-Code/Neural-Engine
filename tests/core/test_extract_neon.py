@@ -10,7 +10,7 @@ import os
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, f"{REPO_ROOT}/src")
 
-from core.engine.interpreter import extract_neon_blocks, NeonBlock  # noqa: E402
+from core.engine.interpreter import extract_neon_blocks  # noqa: E402
 from core.engine.ast_nodes import ParserError  # noqa: E402
 
 

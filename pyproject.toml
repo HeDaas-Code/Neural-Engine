@@ -24,3 +24,7 @@ gui = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+ignore = ["tests/v2_pending"]

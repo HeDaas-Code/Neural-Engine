@@ -6,7 +6,6 @@ import io
 import sys
 from contextlib import redirect_stdout
 
-import pytest
 
 import os
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

@@ -3,10 +3,7 @@
 按 issue #40 acceptance criteria 验证 main() 错误路径 + import 可走。
 """
 import sys
-import tempfile
-from pathlib import Path
 
-import pytest
 
 import os
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

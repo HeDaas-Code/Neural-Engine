@@ -28,6 +28,7 @@ from core.engine.ast_nodes import (
     If, Branch, CallExpression,
     DecoratorCall, DecoratorStop,
 )
+import re
 
 
 @dataclass(frozen=True, slots=True)
@@ -500,8 +501,6 @@ def parse_block_body(
 
 # ─── 第六阶段：node if 解析 ──────────────────────────────────────────────────
 
-
-import re
 
 _BINARY_IF_RE = re.compile(r"^node if\s+(\w+)\s*\[(\w+),(\w+)\]\s*$")
 _MULTI_IF_RE = re.compile(r"^node if\s+(\w+)\s*\[([^\]]+)\]\s*$")

@@ -13,7 +13,7 @@ from typing import Protocol
 
 from core.engine.ast_nodes import (
     Story, Block, Start, End, IdMeta, IdEnd,
-    Text, In, Echo, NextId, If, Branch, CallExpression, NextDecl,
+    Text, In, Echo, NextId, If, CallExpression, NextDecl,
     DecoratorCall, DecoratorStop,
 )
 from core.engine.protocol import (
@@ -326,7 +326,7 @@ class Executor:
         end_marker = self._get_end_marker(block)
         if end_marker is None:
             raise RuntimeError(
-                f"block ended with empty NEXT and no endX marker"
+                "block ended with empty NEXT and no endX marker"
             )
         if end_marker.route_chapter is not None:
             self.sink.put_evt(RouteEvt(target=end_marker.route_chapter))

@@ -7,7 +7,7 @@ import os
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, f"{REPO_ROOT}/src")
 
-from core.engine.interpreter import parse_block_meta, BlockMeta  # noqa: E402
+from core.engine.interpreter import parse_block_meta  # noqa: E402
 from core.engine.ast_nodes import ParserError, IdMeta, IdEnd  # noqa: E402
 
 
