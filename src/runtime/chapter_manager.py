@@ -111,6 +111,7 @@ class ChapterManager:
            - RouteEvt → handle_route_evt（嵌套支持：chapter 内部 end:route 触发后，
              while 会再次循环处理新 RouteEvt）
            - ChapterEndEvt → break
+           - None（非阻塞 bus 如 MemoryEngineBus 空了）→ break
            - 其他 evt（TextEvt / PromptInputEvt / DecoratorEvt / LogEvt）→ 忽略
              （executor 已通过 self.sink.put_evt → bus.put_evt 直接推到 bus，
              GUI 进程侧有自己订阅 loop）
@@ -121,6 +122,9 @@ class ChapterManager:
 
         while True:
             evt = self.bus.get_evt()
+            if evt is None:
+                # 非阻塞 bus（MemoryEngineBus）空了 → 无更多事件
+                break
             if isinstance(evt, RouteEvt):
                 self.handle_route_evt(evt)
             elif isinstance(evt, ChapterEndEvt):

@@ -8,3 +8,4 @@ venv/
 .obsidian/     # Obsidian 本地配置
 .obsidian/**   # 显式递归匹配（git 对带尾 / 的目录模式某些场景不生效）
 src/neural_engine.egg-info/
+tmp/           # 工作草稿 / issue 评论草稿 / 原型——本地文件，不入仓库

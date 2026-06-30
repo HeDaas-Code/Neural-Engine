@@ -20,6 +20,7 @@ from core.engine.protocol import (
     RouteEvt, ChapterEndEvt,
     TextEvt, PromptInputEvt, UserInputCmd,
     DecoratorEvt, LogEvt,
+    SaveCmd, LoadCmd, SaveAckEvt, LoadAckEvt,
 )
 from core.engine.expr import ExprDispatcher, ExprError
 
@@ -65,6 +66,42 @@ class GameState:
     vars: dict = field(default_factory=dict)
     path: list = field(default_factory=list)
     next_table: dict = field(default_factory=dict)
+    current_block_id: str | None = None
+
+    def to_dict(self) -> dict:
+        """序列化为 dict（含 version 字段供 V3+ 升级迁移）。
+
+        D2 决策：复用 protocol.py JSON 序列化模式。
+        返回防御性拷贝，外部修改不影响内部状态。
+        """
+        return {
+            "version": 1,
+            "vars": dict(self.vars),
+            "path": list(self.path),
+            "current_block_id": self.current_block_id,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "GameState":
+        """从 dict 反序列化（向后兼容老存档）。
+
+        - 缺 version → 视作 v1 老存档（不抛错）
+        - version > 1 → ValueError（V3+ 升级保护）
+        - 缺 vars/path/current_block_id → 用默认值
+        - 内部做防御性拷贝，不引用输入 dict
+        """
+        if not isinstance(d, dict):
+            raise ValueError(f"GameState.from_dict 期望 dict，得到 {type(d).__name__}")
+        version = d.get("version", 1)
+        if version > 1:
+            raise ValueError(
+                f"GameState version {version} 不支持（当前仅支持 version=1）"
+            )
+        return cls(
+            vars=dict(d.get("vars", {})),
+            path=list(d.get("path", [])),
+            current_block_id=d.get("current_block_id"),
+        )
 
 
 class Executor:
@@ -73,10 +110,19 @@ class Executor:
     入口 id:start 块，按 Start→...→End 顺序调度节点。
     """
 
-    def __init__(self, story: Story, sink: EventSink, *, entry_id: str = "start"):
+    def __init__(
+        self,
+        story: Story,
+        sink: EventSink,
+        *,
+        entry_id: str = "start",
+        state: GameState | None = None,
+        save_manager=None,
+    ):
         self.story = story
         self.sink = sink
-        self.state = GameState()
+        self.state = state if state is not None else GameState()
+        self.save_manager = save_manager
         self._entry_id = entry_id
         self.next: tuple = None  # NEXT 跳转目标
         self._deco_state: dict = {}  # v0-issue-15 修饰器状态 {name: {key: val}}
@@ -144,6 +190,8 @@ class Executor:
     def run(self) -> None:
         """从 entry 块开始执行。"""
         entry_block = self._find_entry_block()
+        # 设置 current_block_id 到入口块
+        self.state.current_block_id = self._entry_id
         self._execute_block_loop(entry_block)
 
     def _execute_block_loop(self, start_block: Block) -> None:
@@ -159,6 +207,8 @@ class Executor:
         if self.next is None:
             return None
         _, target_id = self.next
+        # 更新 current_block_id 到下一块
+        self.state.current_block_id = target_id
         return self._find_block_by_id(target_id)
 
     def run_block(self, block: Block) -> None:
@@ -190,15 +240,22 @@ class Executor:
             if isinstance(node, In):
                 self.sink.put_evt(PromptInputEvt(var=node.var))
                 cmd = self.sink.get_cmd()
-                if cmd is not None:
-                    # 尝试 int 转换，失败则保留字符串
+                # v2-p0: 拦截 SaveCmd / LoadCmd（存档/读档命令不走 UserInputCmd）
+                while cmd is not None and not isinstance(cmd, UserInputCmd):
+                    if isinstance(cmd, SaveCmd):
+                        self._handle_save_cmd(cmd)
+                    elif isinstance(cmd, LoadCmd):
+                        self._handle_load_cmd(cmd)
+                    else:
+                        break
+                    cmd = self.sink.get_cmd()
+                if isinstance(cmd, UserInputCmd):
                     raw = cmd.value
                     try:
                         self.state.vars[node.var] = int(raw)
                     except (ValueError, TypeError):
                         self.state.vars[node.var] = raw
-                else:
-                    # 阻塞式等待——v0-issue-17 实现；本 issue 抛错
+                elif cmd is None:
                     raise NotImplementedError(
                         "blocking prompt_input not yet implemented; "
                         "use MemoryInputSink in tests"
@@ -332,3 +389,51 @@ class Executor:
             self.sink.put_evt(RouteEvt(target=end_marker.route_chapter))
         else:
             self.sink.put_evt(ChapterEndEvt())
+
+    # ─── v2-p0: 存档/读档命令处理 ──────────────────────────────────────────
+
+    def _handle_save_cmd(self, cmd: SaveCmd) -> None:
+        """处理 SaveCmd：调 SaveManager.save → 发 SaveAckEvt。
+
+        - 无 save_manager → SaveAckEvt(ok=False, error="no save_manager")
+        - save_manager.save 抛错（slot 非法 / IO 错）→ SaveAckEvt(ok=False, error=str(e))
+        - 成功 → SaveAckEvt(ok=True)
+        """
+        if self.save_manager is None:
+            self.sink.put_evt(SaveAckEvt(
+                slot=cmd.slot, ok=False, error="no save_manager configured",
+            ))
+            return
+        try:
+            self.save_manager.save(cmd.slot, self.state)
+        except Exception as e:
+            self.sink.put_evt(SaveAckEvt(
+                slot=cmd.slot, ok=False, error=str(e),
+            ))
+            return
+        self.sink.put_evt(SaveAckEvt(slot=cmd.slot, ok=True))
+
+    def _handle_load_cmd(self, cmd: LoadCmd) -> None:
+        """处理 LoadCmd：调 SaveManager.load → 替换 self.state → 发 LoadAckEvt。
+
+        - 无 save_manager → LoadAckEvt(ok=False, error="no save_manager")
+        - save_manager.load 抛错（slot 非法 / 文件不存在）→ LoadAckEvt(ok=False, error=str(e))，
+          self.state 不变
+        - 成功 → self.state = new_state + LoadAckEvt(ok=True)
+        """
+        if self.save_manager is None:
+            self.sink.put_evt(LoadAckEvt(
+                slot=cmd.slot, ok=False, error="no save_manager configured",
+            ))
+            return
+        try:
+            new_state = self.save_manager.load(cmd.slot)
+        except Exception as e:
+            self.sink.put_evt(LoadAckEvt(
+                slot=cmd.slot, ok=False, error=str(e),
+            ))
+            return
+        # 成功路径：替换 state（注意 ExprDispatcher 也要重建，引用新 state）
+        self.state = new_state
+        self._dispatcher = ExprDispatcher(self.state)
+        self.sink.put_evt(LoadAckEvt(slot=cmd.slot, ok=True))

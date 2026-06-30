@@ -81,9 +81,20 @@ def test_main_with_minimal_chapter_returns_0_headless(tmp_path, monkeypatch):
         def __init__(self, *a, **kw):
             from core.engine.executor import MemoryEventSink
             self._sink = MemoryEventSink()
+            self._get_idx = 0
+        @property
+        def events(self):
+            return self._sink.events
         def put_evt(self, evt):
             self._sink.put_evt(evt)
         def get_cmd(self):
+            return None
+        def get_evt(self):
+            # 非阻塞读：按 idx 顺序返回 _sink.events；空了返回 None
+            if self._get_idx < len(self._sink.events):
+                e = self._sink.events[self._get_idx]
+                self._get_idx += 1
+                return e
             return None
         def close(self):
             pass

@@ -90,10 +90,38 @@ class ShutdownCmd:
 # ─── 工厂函数 ────────────────────────────────────────────────────────────────
 
 
+@dataclass(frozen=True, slots=True)
+class SaveCmd:
+    slot: str
+
+    def to_dict(self) -> dict:
+        return {"cmd": "save", "slot": self.slot}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "SaveCmd":
+        _check_dict(d, "SaveCmd")
+        return cls(slot=_require_str(d, "slot", "SaveCmd"))
+
+
+@dataclass(frozen=True, slots=True)
+class LoadCmd:
+    slot: str
+
+    def to_dict(self) -> dict:
+        return {"cmd": "load", "slot": self.slot}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "LoadCmd":
+        _check_dict(d, "LoadCmd")
+        return cls(slot=_require_str(d, "slot", "LoadCmd"))
+
+
 _CMD_REGISTRY = {
     "load_chapter": LoadChapterCmd,
     "user_input": UserInputCmd,
     "shutdown": ShutdownCmd,
+    "save": SaveCmd,
+    "load": LoadCmd,
 }
 
 
@@ -152,20 +180,30 @@ class PromptInputEvt:
 class DecoratorEvt:
     name: str
     args: list[str]
+    kind: str = "call"  # "call" 或 "stop"（v2-p0 装饰器钩子用）
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "event": "decorator",
             "name": self.name,
             "args": list(self.args),  # 防御性拷贝
         }
+        if self.kind != "call":
+            d["kind"] = self.kind
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "DecoratorEvt":
         _check_dict(d, "DecoratorEvt")
+        kind = d.get("kind", "call")
+        if not isinstance(kind, str):
+            raise ValueError(
+                f"DecoratorEvt.kind 应为 str，得到 {type(kind).__name__}"
+            )
         return cls(
             name=_require_str(d, "name", "DecoratorEvt"),
             args=_require_str_list(d, "args", "DecoratorEvt"),
+            kind=kind,
         )
 
 
@@ -213,6 +251,68 @@ class LogEvt:
 # ─── 工厂函数 ────────────────────────────────────────────────────────────────
 
 
+@dataclass(frozen=True, slots=True)
+class SaveAckEvt:
+    slot: str
+    ok: bool
+    error: str = ""
+
+    def to_dict(self) -> dict:
+        d = {"event": "save_ack", "slot": self.slot, "ok": self.ok}
+        if self.error:
+            d["error"] = self.error
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "SaveAckEvt":
+        _check_dict(d, "SaveAckEvt")
+        slot = _require_str(d, "slot", "SaveAckEvt")
+        if "ok" not in d:
+            raise ValueError("SaveAckEvt 缺少字段 'ok'")
+        ok = d["ok"]
+        if not isinstance(ok, bool):
+            raise ValueError(
+                f"SaveAckEvt.ok 应为 bool，得到 {type(ok).__name__}"
+            )
+        error = d.get("error", "")
+        if not isinstance(error, str):
+            raise ValueError(
+                f"SaveAckEvt.error 应为 str，得到 {type(error).__name__}"
+            )
+        return cls(slot=slot, ok=ok, error=error)
+
+
+@dataclass(frozen=True, slots=True)
+class LoadAckEvt:
+    slot: str
+    ok: bool
+    error: str = ""
+
+    def to_dict(self) -> dict:
+        d = {"event": "load_ack", "slot": self.slot, "ok": self.ok}
+        if self.error:
+            d["error"] = self.error
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "LoadAckEvt":
+        _check_dict(d, "LoadAckEvt")
+        slot = _require_str(d, "slot", "LoadAckEvt")
+        if "ok" not in d:
+            raise ValueError("LoadAckEvt 缺少字段 'ok'")
+        ok = d["ok"]
+        if not isinstance(ok, bool):
+            raise ValueError(
+                f"LoadAckEvt.ok 应为 bool，得到 {type(ok).__name__}"
+            )
+        error = d.get("error", "")
+        if not isinstance(error, str):
+            raise ValueError(
+                f"LoadAckEvt.error 应为 str，得到 {type(error).__name__}"
+            )
+        return cls(slot=slot, ok=ok, error=error)
+
+
 _EVT_REGISTRY = {
     "text": TextEvt,
     "prompt_input": PromptInputEvt,
@@ -220,6 +320,8 @@ _EVT_REGISTRY = {
     "route": RouteEvt,
     "chapter_end": ChapterEndEvt,
     "log": LogEvt,
+    "save_ack": SaveAckEvt,
+    "load_ack": LoadAckEvt,
 }
 
 

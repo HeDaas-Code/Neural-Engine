@@ -677,6 +677,51 @@ def parse_if_stmt(
 _DECOR_NAME_RE = re.compile(r"^([a-z_]\w*)$")
 
 
+def _split_decorator_args(args_str: str, lineno: int) -> list[str]:
+    """按顶层逗号切分修饰器 args，支持 `[...]` 结构化列表语法（ADR-0004 G5）。
+
+    规则：
+    - `[...]` 内的逗号不作为顶层分隔符（深度计数）
+    - 嵌套 `[a:[1,2,3]]` 也支持（深度可叠加）
+    - 未闭合的 `[` → ParserError
+    - 顶层逗号前后空白会被 strip
+    """
+    args: list[str] = []
+    depth = 0
+    cur = []
+    for ch in args_str:
+        if ch == "[":
+            depth += 1
+            cur.append(ch)
+        elif ch == "]":
+            depth -= 1
+            if depth < 0:
+                # 多余的 `]`（无对应 `[`）—— 视为语法错误
+                raise ParserError(
+                    f"unmatched ']' in decorator args at line {lineno}",
+                    loc=BlockLocation(lineno=lineno, col=1),
+                )
+            cur.append(ch)
+        elif ch == "," and depth == 0:
+            # 顶层逗号 → 切分
+            piece = "".join(cur).strip()
+            if piece:
+                args.append(piece)
+            cur = []
+        else:
+            cur.append(ch)
+    # 收尾：检查未闭合
+    if depth != 0:
+        raise ParserError(
+            f"unmatched '[' in decorator args at line {lineno}",
+            loc=BlockLocation(lineno=lineno, col=1),
+        )
+    piece = "".join(cur).strip()
+    if piece:
+        args.append(piece)
+    return args
+
+
 def parse_decorator(line: str, lineno: int):
     """解析 @xxx 修饰器行，返回 DecoratorCall 或 DecoratorStop。
 
@@ -685,9 +730,13 @@ def parse_decorator(line: str, lineno: int):
     - 任一 arg 含 ':' → DecoratorCall(name=xxx, args=(...))
     - 无 args → DecoratorStop(name=xxx, key="")
 
+    ADR-0004 G5: args 支持 `[item1,item2,...]` 结构化列表语法，
+    `[...]` 内的逗号不作为顶层分隔符，整体作为一个 arg 保留。
+
     错误：
     - 缺名（@ 后空）→ ParserError
     - 非法名（非 snake_case）→ ParserError
+    - 未闭合 `[` / 多余 `]` → ParserError
     """
     s = line.strip()
     if not s.startswith("@"):
@@ -713,11 +762,11 @@ def parse_decorator(line: str, lineno: int):
             loc=BlockLocation(lineno=lineno, col=1),
         )
 
-    # 拆 args（按逗号 + 可选空格）
+    # 拆 args（按顶层逗号 + 支持 [...] 结构化列表语法）
     if args_str.strip() == "":
         return DecoratorStop(name=name, key="")
 
-    args = tuple(a.strip() for a in args_str.split(",") if a.strip())
+    args = tuple(_split_decorator_args(args_str, lineno))
 
     # 判定 call vs stop
     all_bare = all(":" not in a for a in args)

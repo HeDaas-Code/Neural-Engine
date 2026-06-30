@@ -27,5 +27,4 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-norecursedirs = ["tests/v2_pending", ".git", "__pycache__"]
-ignore = ["tests/v2_pending"]
+norecursedirs = [".git", "__pycache__"]

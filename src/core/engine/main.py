@@ -2,6 +2,8 @@
 
 v0-issue-17 范围：装配 EngineBus + 加载章节 + 命令循环 + GUI 子进程降级 headless。
 v0-issue-19 落地端到端 fixture；v0-issue-18 落地 GUI 进程。
+v2-p0 (V2-04): 暴露 validate_chapter_path + CHAPTERS_ROOT + MAX_CHAPTER_SIZE
+  供 runtime.load_chapter 复用 P0-S1 4 条闸门（symlink / 越界 / 扩展名 / 大小）。
 """
 from __future__ import annotations
 
@@ -11,7 +13,6 @@ from pathlib import Path
 
 from core.engine.ast_nodes import ParserError
 from core.engine.bus import EngineBus
-from core.engine.executor import Executor
 from core.engine.interpreter import (
     extract_neon_blocks,
     parse_block_skeleton,
@@ -23,6 +24,59 @@ from core.engine.protocol import LogEvt
 
 # 用于测试时替换的可观察变量
 _last_bus = None
+
+# ─── v2-p0 P0-S1 路径校验常量（供 runtime.load_chapter 复用） ────────────────
+# CHAPTERS_ROOT：章节文件根目录（CLI 启动时按相对路径解析；测试用 monkeypatch 切）
+CHAPTERS_ROOT: Path = Path("chapters")
+# MAX_CHAPTER_SIZE：单章节文件大小上限（字节，默认 1MB 防 OOM）
+MAX_CHAPTER_SIZE: int = 1_000_000
+
+
+def validate_chapter_path(chapter_path) -> Path:
+    """P0-S1 章节路径校验（4 条闸门）。
+
+    单一校验源——供 runtime.load_chapter.load_chapter_safe 复用，
+    禁止在其他模块复制本函数（防漂移）。
+
+    Args:
+        chapter_path: 章节文件路径（str / Path）。
+
+    Returns:
+        校验通过后的绝对 Path（resolved）。
+
+    Raises:
+        ValueError: 任一闸门失败，含具体原因（symlink / under / .md / large|size）。
+    """
+    p = Path(chapter_path)
+    # 闸门 1：拒绝 symlink（防指向 CHAPTERS_ROOT 外的恶意文件）
+    if p.is_symlink():
+        raise ValueError(
+            f"chapter path {p!s} is a symlink, rejected by P0-S1 security gate"
+        )
+    # 闸门 2：resolve 后必须在 CHAPTERS_ROOT 下（防 ../../etc/passwd 穿越）
+    resolved = p.resolve()
+    root_resolved = CHAPTERS_ROOT.resolve()
+    try:
+        resolved.relative_to(root_resolved)
+    except ValueError:
+        raise ValueError(
+            f"chapter path {p!s} (resolved {resolved!s}) is not under "
+            f"CHAPTERS_ROOT {root_resolved!s}"
+        ) from None
+    # 闸门 3：扩展名必须是 .md（防 malware.exe / .py 等）
+    if p.suffix != ".md":
+        raise ValueError(
+            f"chapter path {p!s} must have .md extension, got suffix {p.suffix!r}"
+        )
+    # 闸门 4：文件大小不超过 MAX_CHAPTER_SIZE（防 OOM）
+    if p.exists():
+        size = p.stat().st_size
+        if size > MAX_CHAPTER_SIZE:
+            raise ValueError(
+                f"chapter file {p!s} too large: {size} bytes "
+                f"(max {MAX_CHAPTER_SIZE} bytes)"
+            )
+    return resolved
 
 
 def _load_story(chapter_path: str):
@@ -105,11 +159,16 @@ def main(chapter_path: str) -> int:
                 gui_proc.kill()
         return 1
 
-    # 5. 构造 Executor 跑
+    # 5. 构造 ChapterManager 跑（v2-p0: 支持跨章节 RouteEvt 路由）
     try:
-        exe = Executor(story, bus)
-        exe.run()
-    except (ValueError, RuntimeError, NotImplementedError) as e:
+        from runtime.chapter_manager import ChapterManager
+        mgr = ChapterManager(
+            chapters_root=CHAPTERS_ROOT,
+            bus=bus,
+            initial_story=story,
+        )
+        mgr.run()
+    except (ValueError, RuntimeError, NotImplementedError, FileNotFoundError) as e:
         try:
             bus.put_evt(LogEvt(
                 level="error",
