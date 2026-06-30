@@ -7,11 +7,11 @@ import pytest
 from core.engine.executor import Executor, MemoryEventSink, MemoryInputSink  # noqa: E402
 from core.engine.ast_nodes import (  # noqa: E402
     Story, Block, BlockLocation, IdMeta, IdEnd, NextDecl,
-    Start, End, Text, NextId, If, Branch, CallExpression,
+    Start, End, If, Branch, CallExpression,
     In as AstIn, Echo as AstEcho,
 )
 from core.engine.protocol import (  # noqa: E402
-    TextEvt, LogEvt, ChapterEndEvt, PromptInputEvt, UserInputCmd,
+    LogEvt, ChapterEndEvt, PromptInputEvt,
 )
 from core.engine.expr import ExprError  # noqa: E402
 
@@ -426,3 +426,5 @@ def test_if_expr_failure_emits_error_log_and_reraises():
     error_logs = [e for e in sink.events if isinstance(e, LogEvt) and e.level == "error"]
     assert len(error_logs) == 1
     assert "node if expr failed" in error_logs[0].message
+
+

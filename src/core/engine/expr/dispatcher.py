@@ -105,6 +105,13 @@ class ExprDispatcher:
                     f"expression evaluation failed: {expr!r} "
                     f"(simpleeval: {e})"
                 ) from e
+            except Exception as fe:
+                # fallback handler 自身抛错 (非 ExprError)——按契约包装为 ExprError,
+                # 否则会绕过 executor._execute_if 的 ExprError 捕获导致引擎崩溃
+                raise ExprError(
+                    f"expression evaluation failed: {expr!r} "
+                    f"(fallback error: {type(fe).__name__}: {fe})"
+                ) from fe
         except Exception as e:
             # 其他错误 (ZeroDivisionError / ValueError / SyntaxError / NameError...) 直接包装
             raise ExprError(
