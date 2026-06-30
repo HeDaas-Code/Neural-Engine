@@ -68,3 +68,49 @@ def test_echo_path_uses_real_engine_bus_for_cross_process():
     cmd = bus.get_cmd()
     assert cmd.value == "测试"
     bus.close()
+
+
+def test_echo_numeric_var_survives_engine_bus_round_trip():
+    """echo 输出 int 变量时，TextEvt 经 EngineBus 序列化/反序列化不崩溃。
+
+    回归测试：node in ->var 存储 int（用户输入数字时 executor 做 int 转换），
+    node echo var 取出 int 值放入 TextEvt.content。若不转 str，
+    EngineBus.put_evt → to_dict → JSON → from_dict → _require_str 会抛 ValueError。
+    """
+    from core.engine.bus import EngineBus
+
+    chapter = Path(REPO_ROOT) / "tests" / "test_echo.md"
+    story = _load_story(str(chapter))
+    bus = EngineBus(use_multiprocessing=False)
+    sink = _BusInputSink(bus, inputs=["18"])
+    exe = Executor(story, sink)
+    exe.run()
+
+    # test_echo.md 产生 3 个事件：PromptInputEvt → TextEvt → ChapterEndEvt
+    # 逐个反序列化验证不崩溃（修复前会在 TextEvt.from_dict 抛 ValueError）
+    evts = [bus.get_evt() for _ in range(3)]
+    text_evts = [e for e in evts if isinstance(e, TextEvt)]
+    assert len(text_evts) == 1
+    assert text_evts[0].content == "18"
+    assert isinstance(text_evts[0].content, str)
+    bus.close()
+
+
+class _BusInputSink:
+    """把 EngineBus 当 sink 用，按预设顺序喂 UserInputCmd。"""
+
+    def __init__(self, bus, inputs):
+        self._bus = bus
+        self._inputs = list(inputs)
+        self._idx = 0
+
+    def put_evt(self, evt):
+        self._bus.put_evt(evt)
+
+    def get_cmd(self):
+        if self._idx < len(self._inputs):
+            v = self._inputs[self._idx]
+            self._idx += 1
+            from core.engine.protocol import UserInputCmd
+            return UserInputCmd(value=v)
+        return None

@@ -217,7 +217,7 @@ class Executor:
                     self.sink.put_evt(TextEvt(content="".join(pieces), style="narration"))
                 else:
                     val = self.state.vars[node.var]  # KeyError if unset
-                    self.sink.put_evt(TextEvt(content=val, style="narration"))
+                    self.sink.put_evt(TextEvt(content=str(val), style="narration"))
                 continue
             if isinstance(node, NextId):
                 self.next = (None, node.target_id)
@@ -313,7 +313,7 @@ class Executor:
             # echo / in：广播对应事件
             if target.kind == "echo":
                 val = self.state.vars.get(target.var, "")
-                self.sink.put_evt(TextEvt(content=val, style="narration"))
+                self.sink.put_evt(TextEvt(content=str(val), style="narration"))
             elif target.kind == "in":
                 self.sink.put_evt(PromptInputEvt(var=target.var))
             return  # 不走下面的 NextDecl/CallExpression 分支
