@@ -133,3 +133,20 @@ def test_block_body_routes_shortcut_if():
     if_node = nodes[1]
     assert isinstance(if_node, If)
     assert if_node.cond[0] == "expr"
+
+
+# 12. node echo 拼接 (ADR-0004 G4): ' + ' 分割成 parts
+def test_node_echo_parts_parsing():
+    lines = ["node start\n", "node echo p_text + 是吗？\n", "node end\n"]
+    nodes = parse_block_body(lines, start_lineno=10, block_meta=_empty_meta())
+    assert isinstance(nodes[1], Echo)
+    assert nodes[1].parts == ("p_text", "是吗？")
+    assert nodes[1].var == ""
+
+
+# 13. node echo 多段拼接：按 ' + ' 切出多段
+def test_node_echo_parts_multiple_segments():
+    lines = ["node start\n", "node echo a + b + c\n", "node end\n"]
+    nodes = parse_block_body(lines, start_lineno=10, block_meta=_empty_meta())
+    assert isinstance(nodes[1], Echo)
+    assert nodes[1].parts == ("a", "b", "c")

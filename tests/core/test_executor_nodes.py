@@ -224,3 +224,54 @@ def test_memory_input_sink_consumes_inputs_in_order():
     assert isinstance(cmd2, UserInputCmd) and cmd2.value == "b"
     assert isinstance(cmd3, UserInputCmd) and cmd3.value == "c"
     assert cmd4 is None
+
+
+# 12. Echo 拼接 (ADR-0004 G4): parts 模式——变量值 + 字面量拼接输出
+def test_echo_parts_concatenates_var_and_literal():
+    block = Block(
+        meta=(IdMeta(id="start", lineno=1), IdEnd(x=0, route_chapter=None, lineno=2)),
+        next_table=(),
+        body=(Start(), In(var="p_mood"), Echo(parts=("p_mood", "，我知道了。")), End()),
+        loc=_loc(),
+    )
+    story = Story(blocks=(block,))
+    sink = MemoryInputSink(inputs=["雨"])
+    exe = Executor(story, sink)
+    exe.run()
+    text_evts = [e for e in sink.events if isinstance(e, TextEvt)]
+    assert len(text_evts) == 1
+    assert text_evts[0].content == "雨，我知道了。"
+    assert text_evts[0].style == "narration"
+
+
+# 13. Echo 拼接：part 不在 vars 中按字面量原样输出
+def test_echo_parts_treats_unknown_part_as_literal():
+    block = Block(
+        meta=(IdMeta(id="start", lineno=1), IdEnd(x=0, route_chapter=None, lineno=2)),
+        next_table=(),
+        body=(Start(), Echo(parts=("你好", "，世界。")), End()),
+        loc=_loc(),
+    )
+    story = Story(blocks=(block,))
+    sink = MemoryEventSink()
+    exe = Executor(story, sink)
+    exe.run()
+    text_evts = [e for e in sink.events if isinstance(e, TextEvt)]
+    assert len(text_evts) == 1
+    assert text_evts[0].content == "你好，世界。"
+
+
+# 14. In 节点 int 转换：纯数字输入存为 int（影响下游 node if 值匹配）
+def test_in_node_stores_numeric_input_as_int():
+    block = Block(
+        meta=(IdMeta(id="start", lineno=1), IdEnd(x=0, route_chapter=None, lineno=2)),
+        next_table=(),
+        body=(Start(), In(var="p_pick"), End()),
+        loc=_loc(),
+    )
+    story = Story(blocks=(block,))
+    sink = MemoryInputSink(inputs=["3"])
+    exe = Executor(story, sink)
+    exe.run()
+    assert exe.state.vars["p_pick"] == 3
+    assert isinstance(exe.state.vars["p_pick"], int)
