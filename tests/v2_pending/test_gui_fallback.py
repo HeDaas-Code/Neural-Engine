@@ -160,11 +160,20 @@ def test_fallback_pyqt6_present_but_pyqt6_main_missing(monkeypatch):
     V2-01 落地后 pyqt6_main.py 真实存在，本测试通过把 sys.modules["runtime.gui.pyqt6_main"]
     设为 None 强制 import 失败（Python import None 模块会抛 ImportError），
     验证 _try_pyqt6_main 的 ImportError 捕获 → CLI 降级路径仍然健壮。
+
+    关键修复：当 prior 测试已 import 过 pyqt6_main 时，`runtime.gui` 包对象会缓存
+    `pyqt6_main` 属性，导致 `from runtime.gui import pyqt6_main` 通过属性查找成功
+    （忽略 sys.modules=None）。必须同时删除包属性才能真实触发 ImportError。
+    否则 pyqt6_main.main() 会启动真 Qt 事件循环（PyQt6 已装）→ 测试挂死。
     """
     # Mock find_spec 返回非 None（假装 PyQt6 已装）
     monkeypatch.setattr("runtime.gui.main.find_spec", lambda name: object() if name == "PyQt6" else None)
     # 把 pyqt6_main 设为 None → `from runtime.gui import pyqt6_main` 抛 ImportError
     monkeypatch.setitem(sys.modules, "runtime.gui.pyqt6_main", None)
+    # 同时删除 runtime.gui 包上缓存的 pyqt6_main 属性（防属性查找绕过 sys.modules=None）
+    import runtime.gui as _gui_pkg
+    if hasattr(_gui_pkg, "pyqt6_main"):
+        monkeypatch.delattr(_gui_pkg, "pyqt6_main")
 
     from runtime.gui.main import main
     from core.engine.protocol import TextEvt

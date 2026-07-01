@@ -76,6 +76,7 @@ class FakeQLineEdit:
     def __init__(self, *args, **kwargs):
         self._text = ""
         self._enabled = True
+        self._visible = True
         self.returnPressed = FakeSignal()
 
     def text(self):
@@ -93,6 +94,12 @@ class FakeQLineEdit:
     def isEnabled(self):
         return self._enabled
 
+    def setVisible(self, v):
+        self._visible = v
+
+    def isVisible(self):
+        return self._visible
+
     def setFocus(self):
         pass
 
@@ -100,12 +107,61 @@ class FakeQLineEdit:
 class FakeQPushButton:
     def __init__(self, text="", *args, **kwargs):
         self._text = text
+        self._visible = True
         self.clicked = FakeSignal()
+
+    def setVisible(self, v):
+        self._visible = v
+
+    def isVisible(self):
+        return self._visible
 
 
 class FakeQWidget:
     def __init__(self, *args, **kwargs):
         pass
+
+
+class FakeQLabel:
+    """Fake QLabel —— v3-04 ImageRenderer 用。"""
+    def __init__(self, *args, **kwargs):
+        self._pixmap = None
+        self._scaled = False
+        self._alignment = None
+        self._parent = None
+        self._cleared = False
+
+    def setPixmap(self, pm):
+        self._pixmap = pm
+
+    def setScaledContents(self, b):
+        self._scaled = b
+
+    def setAlignment(self, a):
+        self._alignment = a
+
+    def clear(self):
+        self._cleared = True
+        self._pixmap = None
+
+    def setParent(self, p):
+        self._parent = p
+
+    def deleteLater(self):
+        pass
+
+    def show(self):
+        pass
+
+
+class FakeQPixmap:
+    """Fake QPixmap —— v3-04 ImageRenderer 用。"""
+    def __init__(self, path=""):
+        self._path = path
+
+    @classmethod
+    def fromLocalFile(cls, path):
+        return cls(path)
 
 
 class FakeQVBoxLayout:
@@ -139,6 +195,9 @@ def fake_pyqt6(monkeypatch):
     qtcore.QObject = MagicMock()
     qtcore.pyqtSignal = MagicMock(return_value=FakeSignal())
 
+    qtgui = types.ModuleType("PyQt6.QtGui")
+    qtgui.QPixmap = FakeQPixmap
+
     qtwidgets = types.ModuleType("PyQt6.QtWidgets")
     qtwidgets.QApplication = FakeQApplication
     qtwidgets.QMainWindow = FakeQMainWindow
@@ -147,28 +206,43 @@ def fake_pyqt6(monkeypatch):
     qtwidgets.QPushButton = FakeQPushButton
     qtwidgets.QWidget = FakeQWidget
     qtwidgets.QVBoxLayout = FakeQVBoxLayout
+    qtwidgets.QLabel = FakeQLabel
 
     pyqt6_pkg = types.ModuleType("PyQt6")
     pyqt6_pkg.QtCore = qtcore
     pyqt6_pkg.QtWidgets = qtwidgets
+    pyqt6_pkg.QtGui = qtgui
     monkeypatch.setitem(sys.modules, "PyQt6", pyqt6_pkg)
     monkeypatch.setitem(sys.modules, "PyQt6.QtCore", qtcore)
+    monkeypatch.setitem(sys.modules, "PyQt6.QtGui", qtgui)
     monkeypatch.setitem(sys.modules, "PyQt6.QtWidgets", qtwidgets)
 
 
 @pytest.fixture(autouse=True)
 def _reset_decorator_registry():
-    """每个测试前后清空 core.decorators registry + style/bgm 状态。"""
+    """每个测试前后清空 core.decorators registry + style/bgm/bg/char 状态。"""
     from core.decorators import clear
     from core.decorators import style as style_mod
     from core.decorators import bgm as bgm_mod
+    from core.decorators import bg as bg_mod
+    from core.decorators import char as char_mod
     clear()
     style_mod.reset_last_style()
     bgm_mod.reset_last_bgm()
+    bg_mod.reset_last_bg()
+    char_mod.reset_last_char()
+    bgm_mod.set_audio_manager(None)
+    bg_mod.set_image_manager(None)
+    char_mod.set_image_manager(None)
     yield
     clear()
     style_mod.reset_last_style()
     bgm_mod.reset_last_bgm()
+    bg_mod.reset_last_bg()
+    char_mod.reset_last_char()
+    bgm_mod.set_audio_manager(None)
+    bg_mod.set_image_manager(None)
+    char_mod.set_image_manager(None)
 
 
 # ─── 1. 集成：chapter01_v1.md → GUI 全流程 ────────────────────────────────
