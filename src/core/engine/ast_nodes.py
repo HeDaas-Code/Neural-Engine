@@ -81,6 +81,7 @@ class Text:
 @dataclass(frozen=True, slots=True)
 class In:
     var: str
+    options: tuple[str, ...] = ()  # v3-02: 选项列表（空=自由输入）
 
 
 @dataclass(frozen=True, slots=True)

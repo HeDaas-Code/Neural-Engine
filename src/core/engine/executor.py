@@ -118,6 +118,7 @@ class Executor:
         entry_id: str = "start",
         state: GameState | None = None,
         save_manager=None,
+        before_block=None,
     ):
         self.story = story
         self.sink = sink
@@ -127,6 +128,8 @@ class Executor:
         self.next: tuple = None  # NEXT 跳转目标
         self._deco_state: dict = {}  # v0-issue-15 修饰器状态 {name: {key: val}}
         self._dispatcher = ExprDispatcher(self.state)
+        # v4-03: 块级前置钩子，签名 (block, state) -> None；默认 None（不影响 v0/v1/v2/v3）
+        self._before_block = before_block
         # 跨块 ID 校验：所有 next_table target_id + NextId 目标 + if 分支目标 必须在 story
         self._validate_target_ids()
 
@@ -198,6 +201,9 @@ class Executor:
         """跑当前块 + 按 NEXT 跳到下一块 + 循环。"""
         current = start_block
         while current is not None:
+            # v4-03: 块级前置钩子（断点调试用）；可抛 _StopExecution 跳出循环
+            if self._before_block is not None:
+                self._before_block(current, self.state)
             self.next = None
             self.run_block(current)
             current = self._next_block(current)
@@ -238,7 +244,7 @@ class Executor:
                 self.sink.put_evt(TextEvt(content=node.content, style="narration"))
                 continue
             if isinstance(node, In):
-                self.sink.put_evt(PromptInputEvt(var=node.var))
+                self.sink.put_evt(PromptInputEvt(var=node.var, options=node.options))
                 cmd = self.sink.get_cmd()
                 # v2-p0: 拦截 SaveCmd / LoadCmd（存档/读档命令不走 UserInputCmd）
                 while cmd is not None and not isinstance(cmd, UserInputCmd):
@@ -304,7 +310,11 @@ class Executor:
         elif isinstance(deco, DecoratorStop):
             if deco.name in self._deco_state:
                 self._deco_state[deco.name].pop(deco.key, None)
-            self.sink.put_evt(DecoratorEvt(name=deco.name, args=[deco.key]))
+            # v3-04: DecoratorStop 发射 kind="stop"（之前误用默认 "call"）
+            # 让 @bg/@char/@bgm 的 stop 语义正确路由到 hook 的 stop 分支
+            self.sink.put_evt(
+                DecoratorEvt(name=deco.name, args=[deco.key], kind="stop")
+            )
 
     def _execute_if(self, if_node: If) -> None:
         """v1 (ADR-0004): node if 真求值。

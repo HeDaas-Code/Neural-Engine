@@ -146,9 +146,13 @@ def parse_cmd(d: dict):
 class TextEvt:
     content: str
     style: str = "narration"
+    speaker: str = ""  # v3-01: 名字标签（空字符串=旁白）
 
     def to_dict(self) -> dict:
-        return {"event": "text", "content": self.content, "style": self.style}
+        d: dict = {"event": "text", "content": self.content, "style": self.style}
+        if self.speaker:
+            d["speaker"] = self.speaker
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "TextEvt":
@@ -160,20 +164,38 @@ class TextEvt:
             raise ValueError(
                 f"TextEvt.style 应为 str，得到 {type(style).__name__}"
             )
-        return cls(content=content, style=style)
+        # speaker 可选，v3-01 新增（老协议无此字段→空串=旁白）
+        speaker = d.get("speaker", "")
+        if not isinstance(speaker, str):
+            raise ValueError(
+                f"TextEvt.speaker 应为 str，得到 {type(speaker).__name__}"
+            )
+        return cls(content=content, style=style, speaker=speaker)
 
 
 @dataclass(frozen=True, slots=True)
 class PromptInputEvt:
     var: str
+    options: tuple[str, ...] = ()  # v3-02: 选项列表（空=自由输入 QLineEdit）
 
     def to_dict(self) -> dict:
-        return {"event": "prompt_input", "var": self.var}
+        d: dict = {"event": "prompt_input", "var": self.var}
+        if self.options:
+            d["options"] = list(self.options)
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "PromptInputEvt":
         _check_dict(d, "PromptInputEvt")
-        return cls(var=_require_str(d, "var", "PromptInputEvt"))
+        var = _require_str(d, "var", "PromptInputEvt")
+        # v3-02: options 可选（老协议无此字段→空 tuple）
+        opts_raw = d.get("options", [])
+        if not isinstance(opts_raw, list):
+            raise ValueError(
+                f"PromptInputEvt.options 应为 list，得到 {type(opts_raw).__name__}"
+            )
+        opts = tuple(_require_str({"v": o}, "v", "PromptInputEvt.options") for o in opts_raw)
+        return cls(var=var, options=opts)
 
 
 @dataclass(frozen=True, slots=True)

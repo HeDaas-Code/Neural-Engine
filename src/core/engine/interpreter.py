@@ -385,6 +385,7 @@ def _parse_body_line(line: str, lineno: int):
     """解析块内执行区一行。返回 AST 节点 或 抛 ParserError。
 
     - 'node in ->var' / 'node in->var' → In(var)
+    - 'node in ->var [opt1, opt2]' → In(var, options=(opt1,opt2))  # v3-02
     - 'node echo var' → Echo(var)
     - 'node next_id' → NextId(target_id)
     - '@xxx' → 保留为 Text（v0-issue-12 二次处理）
@@ -412,7 +413,22 @@ def _parse_body_line(line: str, lineno: int):
                     f"empty var after 'node in' at line {lineno}",
                     loc=BlockLocation(lineno=lineno, col=1),
                 )
-            return In(var=after)
+            # v3-02: 解析可选 options [opt1, opt2, ...]
+            options: tuple[str, ...] = ()
+            if "[" in after and after.rstrip().endswith("]"):
+                bracket_start = after.index("[")
+                var_part = after[:bracket_start].strip()
+                bracket_content = after[bracket_start + 1:-1]
+                # 切分选项（顶层逗号，容错空格）
+                opts = [o.strip() for o in bracket_content.split(",") if o.strip()]
+                if not opts:
+                    raise ParserError(
+                        f"empty options list in 'node in' at line {lineno}",
+                        loc=BlockLocation(lineno=lineno, col=1),
+                    )
+                options = tuple(opts)
+                after = var_part
+            return In(var=after, options=options)
         if rest.startswith("echo"):
             after = rest[len("echo"):].strip()
             if not after:
