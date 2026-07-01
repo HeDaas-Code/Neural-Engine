@@ -1,9 +1,10 @@
 # Neural Engine 功能路线图
 
-> **日期**：2026-07-01（v2-p0 完工后更新）
+> **日期**：2026-07-01（v4 开发工具台插入后更新）
 > **作者**：哈尼斯（独立第三方审计）
 > **基线**：v2-p0 完工，467 tests，3500 行源码 + 7900 行测试
 > **详细差距分析**：[GAP-ANALYSIS.md](GAP-ANALYSIS.md)
+> **GitHub Issues 总览**：[#108](https://github.com/HeDaas-Code/Neural-Engine/issues/108)
 
 ---
 
@@ -14,92 +15,94 @@
 | 层 | 能力 | 状态 |
 |---|---|---|
 | **DSL 解析** | neon 围栏、块骨架、元数据 id、next 声明（←）、文本行、node in（→）、node echo（含拼接）、node next_id、node if（值匹配 + 表达式求值）、修饰器（@style / @bgm）、整行注释 | ✅ |
-| **表达式** | simpleeval 沙箱、变量注入、13 内置函数（int/str/float/bool/len/min/max/abs/round + randint/clamp/upper/lower/contains）、fallback 正则、自定义函数注册 | ✅ |
+| **表达式** | simpleeval 沙箱、变量注入、13 内置函数、fallback 正则、自定义函数注册 | ✅ |
 | **执行器** | Text/In/Echo/NextId/If/Decorator 全节点类型、NEXT 三阶段、块级作用域、跨块跳转、RouteEvt/ChapterEndEvt、target_id 校验、SaveCmd/LoadCmd 拦截 | ✅ |
 | **进程协议** | 5 Cmd + 8 Evt + JSON 序列化 + multiprocessing.Queue | ✅ |
-| **GUI** | PyQt6 MainWindow（QTextEdit + QLineEdit + QPushButton）、PyQt6Sink/InputSink 适配、CLI 降级、find_spec 探测 | ✅ 骨架 |
-| **章节管理** | ChapterManager 跨章节路由、load_chapter_safe 路径校验、shared_state 跨章节状态 | ✅ |
-| **存档** | SaveManager save/load/list/delete、GameState 序列化、slot 路径穿越防护 | ✅ |
-| **装饰器钩子** | @style / @bgm register + dispatch 框架、kind 字段 call/stop | ✅ 骨架 |
-| **测试** | 467 tests、10 不变量、18 MVP 表、v0/v1/v2 端到端 | ✅ |
+| **GUI** | PyQt6 MainWindow、PyQt6Sink/InputSink 适配、CLI 降级 | ✅ 骨架 |
+| **章节管理** | ChapterManager 跨章节路由、load_chapter_safe、shared_state | ✅ |
+| **存档** | SaveManager save/load/list/delete、GameState 序列化、slot 防穿越 | ✅ |
+| **装饰器钩子** | @style / @bgm register + dispatch 框架 | ✅ 框架（不渲染） |
+| **表达式增强** | randint/clamp/upper/lower/contains | ✅ |
 
-### 1.2 空壳 / 未落地
+### 1.2 缺失
 
-| 模块 | 状态 | 说明 |
+| 层 | 缺什么 | 严重度 |
 |---|---|---|
-| AudioManager | 空壳 | 只有类名，无 play/stop |
-| VideoPlayer | 空壳 | 只有类名，无 play |
-| @style 渲染 | 记录不渲染 | 写入字典，PyQt6 不读 |
-| @bgm 播放 | 记录不播放 | 写入列表，AudioManager 不调 |
-| 存档恢复执行位置 | ❌ | current_block_id 已存但无恢复跑路径 |
-| 剧情编辑器 | ❌ | src/editor/ 空目录 |
-| 对话框/立绘/背景 | ❌ | 无视觉层 |
-| LLM 集成 | ❌ | 无 |
+| **表现层** | 对话框 / 打字机 / 选项按钮 / 立绘 / 背景 / 音频播放 | 🔴 严重 |
+| **开发工具** | 节点编辑器 / 实时预览 / 调试器 / 资源管理 / 导出 | 🔴 严重 |
+| **交互层** | 命令解析 / 终端模拟 / 虚拟文件系统 / 虚拟网络 | 🟡 Hacknet 才需要 |
+| **用户体验** | 历史回看 / 快进跳过 / 设置菜单 / 存档截图 | 🟡 重要 |
+| **远期** | LLM 集成 / 多语言 / 多平台 | 🟢 可选 |
 
 ---
 
-## 2. 下一步路线：AVG 最小闭环 → Hacknet 扩展
+## 2. 三阶段路线图
 
-详见 [GAP-ANALYSIS.md](GAP-ANALYSIS.md) 的完整分析。
+### v3：AVG 最小闭环（milestone #2 · ~1.5 周）
 
-### 阶段 1：AVG 最小闭环（1 周）
+目标：引擎"能玩"。
 
-让引擎从"能跑测试"变成"能玩"。
-
-| # | 任务 | 改动位置 | 优先级 |
-|---|---|---|---|
-| 1 | 对话框 UI（名字 + 文本框 + 打字机） | `pyqt6_main.py` 重构 | P0 |
-| 2 | 选项按钮 UI（替代裸输入数字） | `pyqt6_main.py` + `PromptInputEvt` 扩展 | P0 |
-| 3 | AudioManager 真实现（pygame.mixer） | `runtime/audio.py` | P0 |
-| 4 | 立绘占位（@style 立绘指令 → 彩色矩形 + 名字） | `pyqt6_main.py` + `@style` 扩展 | P0 |
-| 5 | 背景图占位（@style bg → 纯色/渐变） | `pyqt6_main.py` | P0 |
-
-### 阶段 2：体验补全（3-5 天）
-
-| # | 任务 | 说明 |
+| Issue | 任务 | 依赖 |
 |---|---|---|
-| 6 | 存档截图 + 时间戳 | SaveManager 存 QPixmap + datetime |
-| 7 | 历史回看 | TextEvt 累积 → 历史窗口 |
-| 8 | 跳过/快进 | 已读标记 + 快进快捷键 |
-| 9 | 设置菜单 | 文字速度 / BGM 音量 / 全屏 |
+| #91 | v3-01 对话框 UI（打字机 + 名字 + 样式） | 无 ← 起点 |
+| #92 | v3-02 选项按钮 UI | #91 |
+| #93 | v3-03 AudioManager 真实现 | 无 ← 并行 |
+| #94 | v3-04 立绘 + 背景图 | #91 |
+| #95 | v3-05 存档截图 + 列表 UI | #91 |
+| #96 | v3-06 BackLog 历史回看 | #91 |
+| #97 | v3-07 跳过/快进 | #91, #96 |
+| #98 | v3-08 设置菜单 | #91, #93 |
+| #99 | v3-09 集成测试 + 文档 | 全部 |
 
-### 阶段 3：Hacknet 扩展（2 周）
+### v4：开发工具台（milestone #4 · ~2.5 周）
 
-在 AVG 基础上叠加终端模拟 + 世界模拟。
+目标：引擎有自己的可视化 IDE。模仿 Unity 节点编辑方式，所见即所得。
 
-| # | 任务 | 说明 |
+| Issue | 任务 | 依赖 |
 |---|---|---|
-| 10 | 终端模拟器 | 滚动缓冲 + 命令行 + 历史 + Tab 补全 |
-| 11 | 命令解析器 + CommandRegistry | scan/connect/probe/ls/cat/hack |
-| 12 | 富文本输出 | ANSI color + ASCII art |
-| 13 | neon DSL 桥接 | 命令结果 → UserInputCmd → Executor |
-| 14 | 虚拟文件系统 | 树结构 + ls/cd/cat/rm |
-| 15 | 虚拟网络 | 节点 + 端口 + 连接拓扑 |
-| 16 | 进程模拟 | PortHack / crack + 计时器 |
-| 17 | 邮件系统 | NPC 邮件 → 任务触发 |
+| #109 | v4-01 节点图编辑器（剧情节点可视化 + 连线） | v3 完成 ← 起点 |
+| #110 | v4-02 DSL 双向同步（节点图 ↔ neon 互转） | #109 |
+| #111 | v4-03 实时预览（内嵌引擎 + 断点调试） | #109, #110 |
+| #112 | v4-04 资源管理器（图片/音频/字体） | v3-03, v3-04 |
+| #113 | v4-05 章节管理器 UI（项目结构 + 路由图） | #109, #110 |
+| #114 | v4-06 调试器（变量检查 + 事件流 + 调用栈） | #111 |
+| #115 | v4-07 项目导出（打包独立可运行游戏） | #113 |
+| #116 | v4-08 编辑器主框架（工作台 + 菜单 + 插件） | 全部组件 |
+| #117 | v4-09 集成测试 + 文档 | 全部 |
 
-### 阶段 4：远期（可选）
+**核心设计**：
+- 节点图 ↔ neon 代码双向同步（改图生代码，改代码更图）
+- 实时预览内嵌引擎运行，断点单步调试
+- 资源拖拽到节点自动生成装饰器
+- 插件系统支持扩展
 
-| # | 任务 | 说明 |
+### v5：Hacknet 扩展（milestone #3 · ~2 周）
+
+目标：在 AVG + 编辑器基础上叠加终端模拟 + 世界模拟。
+
+| Issue | 任务 | 依赖 |
 |---|---|---|
-| 18 | LLM 集成（@LLM-jud 装饰器） | ADR-0004 F4 |
-| 19 | 剧情编辑器 | 节点图 GUI |
-| 20 | 章节图可视化 | DOT 图 |
-| 21 | NPC AI | 独立行为 + 延迟回复 |
+| #100 | v5-01 终端模拟器 | v3-01 |
+| #101 | v5-02 命令解析器 + CommandRegistry | #100, #103 |
+| #102 | v5-03 neon DSL 桥接 | #100, #101 |
+| #103 | v5-04 虚拟文件系统 | 无 ← 并行 |
+| #104 | v5-05 虚拟网络 | #103 |
+| #105 | v5-06 进程模拟（PortHack） | #104, #102 |
+| #106 | v5-07 邮件系统 | #101, #103 |
+| #107 | v5-08 集成测试 + 文档 | 全部 |
 
 ---
 
-## 3. 已关闭的旧 issue
+## 3. 总估时
 
-这些在 v2-p0 已全部落地，留作记录：
-
-| 旧 # | 内容 | 落地 PR |
+| 阶段 | 工时 | 产出 |
 |---|---|---|
-| 3.1 | PyQt6 GUI 窗口 | v2-p0-gui-first |
-| 3.2 | 章节加载器 | v2-p0-chapter |
-| 3.3 | 存档/读档 | v2-p0-save |
-| 3.6 | 表达式系统增强（randint/clamp/upper/lower/contains） | PR #85 |
-| 3.11 | 测试覆盖率提升 | PR #87 |
+| v3 AVG 闭环 | ~1.5 周 | 能在 PyQt6 窗口完整玩 chapter01 |
+| v4 开发工具台 | ~2.5 周 | 有自己的可视化 IDE，能拖拽做剧情 |
+| v5 Hacknet 扩展 | ~2 周 | 能做 Hacknet 式终端交互游戏 |
+| **合计** | **~6 周** | **从测试框架到可玩+可编辑的完整引擎** |
+
+v4 是承上启下的核心——v3 做完后引擎"能跑"，v4 让"能跑"变成"好做"，v5 在好做的基础上扩展 Hacknet 式交互。
 
 ---
 
