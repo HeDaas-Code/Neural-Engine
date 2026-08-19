@@ -21,6 +21,7 @@ v2 阶段未实现（v3+ 任务）：
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -85,9 +86,14 @@ class SaveManager:
         return self.save_dir / f"{slot}.json"
 
     def save(self, slot: str, state: GameState) -> None:
-        """存档：state → JSON 文件。
+        """存档：state → JSON 文件（原子写入，失败不破坏旧文件）。
 
         D2 决策：序列化用 `json.dumps(ensure_ascii=False, indent=2) + utf-8`（与 protocol.py 一致）。
+
+        原子写策略（数据完整性兜底）：
+            1. 先写目标路径同目录下的 `.json.tmp` 临时文件
+            2. 全部写入成功 + fsync 后，用 os.replace() 原子替换目标文件
+            3. 任一步骤失败 → 旧文件保持不动；临时文件尽力清理
 
         Args:
             slot: 存档槽位名（仅允许 `[\\w-]+`）。
@@ -95,15 +101,29 @@ class SaveManager:
 
         Raises:
             ValueError: slot 非法（路径穿越 / 空 / 含特殊字符）。
-            OSError: 文件写入失败（权限 / 磁盘满）。
+            OSError: 文件写入失败（权限 / 磁盘满）。旧存档保持完好。
         """
         _validate_slot(slot)
-        path = self._path_for(slot)
+        target_path = self._path_for(slot)
+        # 临时文件与目标文件同目录，确保 os.replace 是同一文件系统的原子 rename
+        tmp_path = target_path.with_suffix(".json.tmp")
         # D2 决策：json.dumps + ensure_ascii=False（中文不转义）+ indent=2（人可读）
-        path.write_text(
-            json.dumps(state.to_dict(), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        payload = json.dumps(state.to_dict(), ensure_ascii=False, indent=2)
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as fh:
+                fh.write(payload)
+                fh.flush()
+                os.fsync(fh.fileno())
+            # 原子替换：POSIX 下 rename 原子；Windows 下 MoveFileEx 等价语义
+            os.replace(tmp_path, target_path)
+        except Exception:
+            # 失败时尽力清理临时文件（不处理清理自身异常，避免覆盖原始异常）
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except OSError:
+                pass
+            raise
 
     def load(self, slot: str) -> GameState:
         """读档：JSON 文件 → GameState。
@@ -134,20 +154,24 @@ class SaveManager:
         return sorted([p.stem for p in self.save_dir.glob("*.json")])
 
     def delete(self, slot: str) -> bool:
-        """删除存档槽位。
+        """删除存档槽位（EAFP 模式，消除 exists→unlink 之间的 TOCTOU 竞态）。
 
         Args:
             slot: 存档槽位名（仅允许 `[\\w-]+`）。
 
         Returns:
-            True —— 文件存在并删除成功；False —— 文件不存在（不抛错）。
+            True —— 本次调用成功删除文件。
+            False —— 文件不存在（可能被并发删除或从未创建）。
 
         Raises:
             ValueError: slot 非法（路径穿越 / 空 / 含特殊字符）。
+            OSError: 除 FileNotFoundError 之外的删除失败（权限、占用等）。
         """
         _validate_slot(slot)
         path = self._path_for(slot)
-        if not path.exists():
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            # 文件不存在：可能根本没有，也可能被并发删除；两者语义一致
             return False
-        path.unlink()
         return True
